@@ -80,7 +80,7 @@ class Fitness:
 
     def measureTotal(self, individual):
         self.resetIndividual(individual)
-        if settings.enable_threading == "maybe":
+        if settings.enable_threading == "yes":
             chunks = [0] * 10
             for i, row in self.learn.iterrows():
                 sequence = row[0]
@@ -109,58 +109,58 @@ class Fitness:
             return RMSE_train, RMSE_test
 
 
-        if settings.enable_threading == "yes":
-            threads = [None] * 10
-            results = [None] * 10
-
-            for i in range(10):
-                # threads[i] = Thread(target=self.thread_measure, args=(individual))
-                threads[i] = Thread(target=self.thread_measure, args=(individual, i, results))
-                threads[i].start()
-                pass
-
-            for i in range(10):
-                threads[i].join()
-
-            MSE_train = 0
-            MSE_test = 0
-
-            for i in range(10):
-                MSE_train += results[i][0]
-                MSE_test += results[i][1]
-
-            testSize = int(int(self.learn.size) / 10)
-            trainSize = self.learn.size - int(int(self.learn.size) / 10)
-            MSE_train = MSE_train / trainSize / 10
-            MSE_test = MSE_test / testSize / 10
-            RMSE_train = math.sqrt(MSE_train)
-            RMSE_test = math.sqrt(MSE_test)
-
-            return RMSE_train, RMSE_test
-        elif settings.enable_threading != "no":
-            raise "incorrect value for enable_threading. correct options: no / yes / maybe"
-
-        test_error = 0.0
-        train_error = 0.0
-        for j in range(10):
-            # Iterating through the training set
-            for i, row in self.learn.iterrows():
-                sequence = row[0]
-                actual_fitness = row[1]
-                if int(self.learn.size / 10) * j <= i < int(self.learn.size / 10) * (j + 1):
-                    test_error += self.eval(sequence, actual_fitness, individual)
-                    continue
-
-                train_error += self.eval(sequence, actual_fitness, individual)
-
-        testSize = int(int(self.learn.size) / 10)
-        trainSize = self.learn.size - int(int(self.learn.size) / 10)
-        MSE_train = train_error / trainSize / 10
-        MSE_test = test_error / testSize / 10
-        RMSE_train = math.sqrt(MSE_train)
-        RMSE_test = math.sqrt(MSE_test)
-
-        return RMSE_train, RMSE_test
+        # if settings.enable_threading == "yes":
+        #     threads = [None] * 10
+        #     results = [None] * 10
+        #
+        #     for i in range(10):
+        #         # threads[i] = Thread(target=self.thread_measure, args=(individual))
+        #         threads[i] = Thread(target=self.thread_measure, args=(individual, i, results))
+        #         threads[i].start()
+        #         pass
+        #
+        #     for i in range(10):
+        #         threads[i].join()
+        #
+        #     MSE_train = 0
+        #     MSE_test = 0
+        #
+        #     for i in range(10):
+        #         MSE_train += results[i][0]
+        #         MSE_test += results[i][1]
+        #
+        #     testSize = int(int(self.learn.size) / 10)
+        #     trainSize = self.learn.size - int(int(self.learn.size) / 10)
+        #     MSE_train = MSE_train / trainSize / 10
+        #     MSE_test = MSE_test / testSize / 10
+        #     RMSE_train = math.sqrt(MSE_train)
+        #     RMSE_test = math.sqrt(MSE_test)
+        #
+        #     return RMSE_train, RMSE_test
+        # elif settings.enable_threading != "no":
+        #     raise "incorrect value for enable_threading. correct options: no / yes / maybe"
+        #
+        # test_error = 0.0
+        # train_error = 0.0
+        # for j in range(10):
+        #     # Iterating through the training set
+        #     for i, row in self.learn.iterrows():
+        #         sequence = row[0]
+        #         actual_fitness = row[1]
+        #         if int(self.learn.size / 10) * j <= i < int(self.learn.size / 10) * (j + 1):
+        #             test_error += self.eval(sequence, actual_fitness, individual)
+        #             continue
+        #
+        #         train_error += self.eval(sequence, actual_fitness, individual)
+        #
+        # testSize = int(int(self.learn.size) / 10)
+        # trainSize = self.learn.size - int(int(self.learn.size) / 10)
+        # MSE_train = train_error / trainSize / 10
+        # MSE_test = test_error / testSize / 10
+        # RMSE_train = math.sqrt(MSE_train)
+        # RMSE_test = math.sqrt(MSE_test)
+        #
+        # return RMSE_train, RMSE_test
 
     def measure(self, individual):
         raise "update this function according to measureTotal"

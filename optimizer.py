@@ -70,7 +70,6 @@ class Optimizer:
             bestIndividual = self.P.pop[0]
 
             now = datetime.now()
-
             current_time = now.strftime("%H:%M:%S")
             print("Current Time =", current_time)
             for j in self.P.pop:

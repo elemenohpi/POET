@@ -197,7 +197,7 @@ def hpcc(reps, hours, runs, startingSeed):
 		file.write("#SBATCH --nodes=1-5                 # number of different nodes - could be an exact number or a range of nodes (same as -N)\n")
 		file.write("#SBATCH --ntasks=5                  # number of tasks - how many tasks (nodes) that you require (same as -n)\n")
 		file.write("#SBATCH --cpus-per-task=2           # number of CPUs (or cores) per task (same as -c)\n")
-		file.write("#SBATCH --mem-per-cpu=2G            # memory required per allocated CPU (or core) - amount of memory (in bytes)\n")
+		file.write("#SBATCH --mem-per-cpu=8G            # memory required per allocated CPU (or core) - amount of memory (in bytes)\n")
 		file.write("#SBATCH --job-name POET_rep_{}      # you can give your job a name for easier identification (same as -J)\n".format(i))
 		file.write("\n########## Command Lines to Run ##########\n\n")
 		file.write("module pandas\n")
