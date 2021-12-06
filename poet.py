@@ -141,7 +141,7 @@ def modelFitness(path):
 	model = I.Individual()
 	model.makeFromFile(path)
 	f = F.Fitness()
-	fitness = f.measureTotal(model)
+	fitness, test = f.measureTotal(model)
 	print("Pro-Predictor: Fitness (RMSE) of {}: {}".format(path, fitness))
 	exit(1)
 
@@ -153,7 +153,7 @@ def compareModels(paths):
 	for path in paths:
 		model.makeFromFile(path)
 		f = F.Fitness()
-		fitness, test = f.measureTotal(model)
+		fitness, test = f.measure_dataset(model)
 		avg += fitness
 		print("Pro-Predictor: Fitness (RMSE) of {}: {}".format(path, fitness))
 		if fitness < best:

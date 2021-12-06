@@ -78,6 +78,20 @@ class Fitness:
             train_error += self.eval(sequence, actual_fitness, individual)
         results[j] = (train_error, test_error)
 
+    def measure_dataset(self, individual):
+        train_error = 0.0
+        for i, row in self.learn.iterrows():
+            sequence = row[0]
+            actual_fitness = row[1]
+            error = self.eval(sequence, actual_fitness, individual)
+            train_error += error ** 2
+
+        trainSize = len(self.learn.index)
+        MSE_train = train_error / trainSize
+        RMSE_train = math.sqrt(MSE_train)
+
+        return RMSE_train, 0
+
     def measureTotal(self, individual):
         self.resetIndividual(individual)
         if settings.enable_threading == "yes":
@@ -107,6 +121,8 @@ class Fitness:
             RMSE_train = math.sqrt(train)
             RMSE_test = math.sqrt(test)
             return RMSE_train, RMSE_test
+        else:
+            raise "uncharted territory"
 
 
         # if settings.enable_threading == "yes":
