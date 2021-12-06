@@ -99,10 +99,16 @@ class Fitness:
             for i, row in self.learn.iterrows():
                 sequence = row[0]
                 actual_fitness = row[1]
-                j = int(i / int(len(self.learn.index) / 10))
+                j = int(i / (len(self.learn.index) / 10))
                 if j == 10:
                     j = 9
-                chunks[j] += self.eval(sequence, actual_fitness, individual)
+                if j == 11:
+                    print(i, int(len(self.learn.index)), int(i / (len(self.learn.index) / 10)))
+                    exit()
+
+                error = self.eval(sequence, actual_fitness, individual)
+                chunks[j] += error ** 2
+
             test = 0
             train = 0
             for i in range(10):
