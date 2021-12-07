@@ -76,7 +76,7 @@ def main():
 
 	# run on hpcc
 	if args.hpcc != None:
-		hpcc(int(args.hpcc), 24, 10000, 300)
+		hpcc(int(args.hpcc), 30, 10000, 300)
 		exit(1)
 
 	# get the fitness of a given model
