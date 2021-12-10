@@ -15,7 +15,7 @@ class Fitness:
         pass
 
     def eval(self, sequence, actualFitness, individual):
-        # This is the starting position of the sequence that we're looking at each time. 
+        # This is the starting position of the sequence that we're looking at each time.
         pos = 0
         measuredFitness = 0.0  # Fitness of individual i
 
@@ -30,7 +30,7 @@ class Fitness:
                     # happens in the case of empty rules.
                     continue
 
-                # Continue if the rule length is more than the unchecked sequence length	
+                # Continue if the rule length is more than the unchecked sequence length
                 if length < (len(sequence) - pos) or length == 0:
                     continue
 
@@ -43,7 +43,7 @@ class Fitness:
                         rule.status = 1
                         individual.usedRulesCount += 1
 
-                    # Check the multiplication/summation mode. We always use the summation mode tho. 
+                    # Check the multiplication/summation mode. We always use the summation mode tho.
                     if self.mode == 0:
                         measuredFitness += rule.weight
                     elif self.mode == 1:
@@ -52,7 +52,7 @@ class Fitness:
                     # If the rule is found, we don't wanna check any other "shorter" rules on the very same position. We wanna update the positioning and look for other rules. If no rule was found, the position updates anyway after the end of this loop so the difference is only the break command which happens only if the rule is found. This defenitely takes more processing power and considers overlapping rules but this is the way to go to consider all the possible cases. Also, note that this raises the issue of exponential slow-down when the number of rules in a table increase. Therefore, I assume we need some sort of bloat removal when the speed of the tool has decreased drastically.
                     break
 
-            # Update the position 
+            # Update the position
             pos += 1
 
         # Calculate the error after the estimation
@@ -332,6 +332,52 @@ class Fitness:
         MSE = fitness / self.learn.size
         RMSE = math.sqrt(MSE)
         return RMSE
+
+    # def predict(self, sequence, individual):
+    #     # This is the starting position of the sequence that we're looking at each time.
+    #     pos = 0
+    #     measuredFitness = 0.0  # Fitness of individual i
+    #
+    #     # Iterate through the sequence
+    #     while pos < len(sequence):
+    #         # Check every rule
+    #         for rule in individual.rules:
+    #             # Find the length of the rule
+    #             try:
+    #                 length = len(rule.pattern)
+    #             except:
+    #                 # happens in the case of empty rules.
+    #                 continue
+    #
+    #             # Continue if the rule length is more than the unchecked sequence length
+    #             if length < (len(sequence) - pos) or length == 0:
+    #                 continue
+    #
+    #             reverse_pattern = rule.pattern[::-1]
+    #             # Normal or Reverse
+    #             if ((rule.pattern == sequence[pos: (pos + length)]) or reverse_pattern == sequence[
+    #                                                                                       pos: (pos + length)]):
+    #                 # rule is found. Update its status and the usedRulesCount to avoid further computation
+    #                 if rule.status == 0:
+    #                     rule.status = 1
+    #                     individual.usedRulesCount += 1
+    #
+    #                 # Check the multiplication/summation mode. We always use the summation mode tho.
+    #                 if self.mode == 0:
+    #                     measuredFitness += rule.weight
+    #                 elif self.mode == 1:
+    #                     measuredFitness *= rule.weight
+    #
+    #                 # If the rule is found, we don't wanna check any other "shorter" rules on the very same position. We wanna update the positioning and look for other rules. If no rule was found, the position updates anyway after the end of this loop so the difference is only the break command which happens only if the rule is found. This defenitely takes more processing power and considers overlapping rules but this is the way to go to consider all the possible cases. Also, note that this raises the issue of exponential slow-down when the number of rules in a table increase. Therefore, I assume we need some sort of bloat removal when the speed of the tool has decreased drastically.
+    #                 break
+    #
+    #         # Update the position
+    #         pos += 1
+    #
+    #     return measuredFitness
+
+
+    # defo check!!!!! TODO
 
     def predict(self, sequence, individual):
         fitness = 0.0
