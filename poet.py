@@ -281,7 +281,7 @@ def hpcc(reps, hours, runs, startingSeed):
         file.write("\n########## Command Lines to Run ##########\n\n")
         file.write("module pandas\n")
         # file.write("module load GCC/6.4.0-2.28 OpenMPI  ### load necessary modules, e.g\n")
-        file.write("cd ~/POET1\n")
+        file.write("cd ~/POET\n")
         file.write("srun -n 1 python poet.py -r {} -o {} -seed {}\n".format(runs, i, i + startingSeed))
         file.write("cd batch\n")
         file.write("scontrol show job $SLURM_JOB_ID     ### write job information to output file")
