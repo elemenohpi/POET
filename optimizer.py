@@ -14,7 +14,6 @@ import time
 from datetime import datetime
 
 
-
 class Optimizer:
     def __init__(self, population):
         self.TT = settings.TT
@@ -71,7 +70,7 @@ class Optimizer:
 
             now = datetime.now()
             current_time = now.strftime("%H:%M:%S")
-            print("Current Time =", current_time)
+            # print("Current Time =", current_time)
             for j in self.P.pop:
                 j.fitness, j.test = fitness.measureTotal(j)
                 avgFitness += j.fitness
@@ -80,10 +79,10 @@ class Optimizer:
                 avgUsedRulesCount += j.usedRulesCount
                 if j.fitness < bestIndividual.fitness:
                     bestIndividual = j
-
-            now = datetime.now()
-
-            current_time = now.strftime("%H:%M:%S")
+            #
+            # now = datetime.now()
+            #
+            # current_time = now.strftime("%H:%M:%S")
 
             # To calculate the average fitness and the average 
             avgFitness = round(avgFitness / float(len(self.P.pop)), 3)
@@ -106,14 +105,14 @@ class Optimizer:
                                                                                                       avgUsedRulesCount)
 
             log_string = "{},{},{},{},{},{},{},{},{}".format(i, bestFitness,
-                                                                                                    bestTest,
-                                                                                                    bestRuleCount,
-                                                                                                    bestUsedRulesCount,
-                                                                                                    avgFitness, avgTest,
-                                                                                                    avgRuleCount,
-                                                                                                    avgUsedRulesCount)
+                                                             bestTest,
+                                                             bestRuleCount,
+                                                             bestUsedRulesCount,
+                                                             avgFitness, avgTest,
+                                                             avgRuleCount,
+                                                             avgUsedRulesCount)
             # Print the evolutionary log
-            print(print_string)
+            print(print_string, flush=True)
 
             # Dynamic Mutation
             # If the fitness is not growing every 25 generations, increase the rates

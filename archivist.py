@@ -75,6 +75,7 @@ class Archivist:
 
 		evoLogs = os.listdir(evoLogDir)
 		models = os.listdir(modelDir)
+		slurms = os.listdir("./")
 		
 		archivePath = "{}/{}".format(archiveDir, datetime.date.today())
 
@@ -111,3 +112,11 @@ class Archivist:
 				counter += 1
 			pathTo = tempPath
 			shutil.move(path, pathTo)
+
+		for file in slurms:
+			if ".out" not in file and ".err" not in file:
+				continue
+			pathTo = archivePath + "/"
+			tempPath = pathTo
+			if os.path.exists(tempPath):
+				shutil.move(file, pathTo)

@@ -21,7 +21,7 @@ class Predictor:
 		self.iter = iter
 		self.pop = []
 		self.output = []
-		self.popSize = 100
+		self.popSize = 10
 		self.codes = settings.TT['key']
 		self.hydroDic = {
 			"I":-0.31,
@@ -76,9 +76,12 @@ class Predictor:
 		for i in range(self.count):
 			print(repr(i+1)+":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness,2))
 
-		for iter_index in range(self.iter):
+		for _ in range(self.iter):
+			self.sort()
 			# for i in range(self.count):
 			# 	print(repr(i+1)+":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness,2))
+			
+			improvement = False
 
 			# mutate
 			for myi, seq in enumerate(self.pop):
@@ -92,25 +95,19 @@ class Predictor:
 				newamino = self.codes[rand]
 				# print("newamino", newamino)
 				newseq.pattern = newseq.pattern[:randomsite] + newamino + newseq.pattern[randomsite+1:]
-				# newseq.pattern = "RDSEWWWWVSKR"
 				# print(seq.pattern)
 				# print(newseq.pattern)
 				tempF = objF.predict(newseq.pattern, individual)
-				# new = objF.predict(newseq.pattern, individual)
-				# old = objF.predict(seq.pattern, individual)
-				# print("old, new", old, new)
-				# # print("tempF", tempF, seq.fitness)
-				# exit()
+				# print("tempF", tempF)
 				if tempF > seq.fitness:
 					newseq.fitness = tempF
 					# print(seq.pattern + " -> " + newseq.pattern + " | fitness: " + repr(seq.fitness) + " -> " + repr(newseq.fitness) )
 					self.pop[myi] = newseq
 					improvement = True
 
-			self.sort()
-			print("######################## Iter: ", iter_index)
-			for i in range(self.count):
-				print(repr(i+1)+":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness,2))
+			if improvement:
+				for i in range(self.count):
+					print(repr(i+1)+":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness,2))
 
 		
 	
