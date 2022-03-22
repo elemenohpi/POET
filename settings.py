@@ -37,6 +37,7 @@ runs = int(config['GP']['runs'])
 pattern_mode = int(config['GP']['pattern_mode'])
 tournament_size = int(config['GP']['tournament_size'])
 cross_rate = float(config['GP']['crossover_unused_selection_chance'])
+fitness_alg = config['GP']['population_size']
 
 # output_name
 pop_log_interval = int(config['OUTPUT']['pop_log_interval'])

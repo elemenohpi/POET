@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # 10 (learn8) and 35 (mock) and 31 (overall)
-model = "POETPaperPeerJRes\poet8res\output\model\model_45.csv"
+model = "best_epoch_models\E8.csv"
 # model = "..\..\..\poetnewres\myfile\POET1\output\model\model_15.csv"
 dataset = "data/mock.csv"
 
@@ -21,7 +21,8 @@ df = df.sort_values("fitness")
 predictions = []
 
 for seq in df["sequence"]:
-    prediction = Evaluator.predict(seq, Indv)
+    # error, prediction = Evaluator.eval(seq, 0, Indv, True)
+    error, prediction = Evaluator.eval(seq, 0, Indv, True)
 
     couple = [seq, prediction]
     predictions.append(couple)
@@ -58,21 +59,21 @@ corr = pre_series.corr(act_series)
 
 print (corr)
 
-plt.style.use('fast')
-
-# plot
-fig, ax = plt.subplots()
-
-plt.xlabel("Protein ID")
-plt.ylabel("Predicted Rank")
-plt.title("Ranking of the Proteins of the Mock Set Using the Best Model of Epoch 8")
-
-x = list(range(43))
-
-# ax.fill_between(gens, q25s, q75s, alpha=.5, linewidth=0)
-# ax.plot(gens, medians, linewidth=2.0)
-ax.bar(x, predicted_ranks, width=1, edgecolor="white", linewidth=0.7, alpha=0.5)
-ax.bar(x, actual_ranks, width=1, edgecolor="white", linewidth=0.7, alpha=0.5)
-plt.show()
-# plt.savefig("./gen_evo/fig.png", dpi=300)
+# plt.style.use('fast')
+#
+# # plot
+# fig, ax = plt.subplots()
+#
+# plt.xlabel("Protein ID")
+# plt.ylabel("Predicted Rank")
+# plt.title("Ranking of the Proteins of the Mock Set Using the Best Model of Epoch 8")
+#
+# x = list(range(43))
+#
+# # ax.fill_between(gens, q25s, q75s, alpha=.5, linewidth=0)
+# # ax.plot(gens, medians, linewidth=2.0)
+# ax.bar(x, predicted_ranks, width=1, edgecolor="white", linewidth=0.7, alpha=0.5)
+# ax.bar(x, actual_ranks, width=1, edgecolor="white", linewidth=0.7, alpha=0.5)
+# plt.show()
+# # plt.savefig("./gen_evo/fig.png", dpi=300)
 

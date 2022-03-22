@@ -175,8 +175,8 @@ def main():
         model = I.Individual()
         model.makeFromFile(modelPath)
         fObj = F.Fitness()
-        prediction = fObj.predict(proteinSeq, model)
-        # error, prediction = fObj.eval(proteinSeq, 12.7, model, True)
+        # prediction = fObj.predict(proteinSeq, model)
+        error, prediction = fObj.eval(proteinSeq, 12.7, model, True)
         print(prediction)
     else:
         raise ("Invalid arguements.")

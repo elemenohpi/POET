@@ -10,7 +10,11 @@ from threading import Thread
 
 class Fitness:
     def __init__(self):
-        self.learn = settings.learn_df
+        try:
+            self.learn = settings.learn_df
+        except AttributeError:
+            print("WARNING: settings.learn_df is not set")
+
         self.mode = settings.pattern_mode  # 0 is the summation mode and 1 is the multiplication mode
         self.k = 0  # for 10-fold cross validation implementation
         pass
@@ -68,7 +72,8 @@ class Fitness:
                         measuredFitness *= rule.weight
 
                     # If the rule is found, we don't wanna check any other "shorter" rules on the very same position. We wanna update the positioning and look for other rules. If no rule was found, the position updates anyway after the end of this loop so the difference is only the break command which happens only if the rule is found. This defenitely takes more processing power and considers overlapping rules but this is the way to go to consider all the possible cases. Also, note that this raises the issue of exponential slow-down when the number of rules in a table increase. Therefore, I assume we need some sort of bloat removal when the speed of the tool has decreased drastically.
-                    break
+                    # break
+                    # print(rule.pattern, rule.weight)
 
             # Update the position 
             pos += 1
@@ -102,6 +107,8 @@ class Fitness:
 
     def measureTotal(self, individual):
         self.resetIndividual(individual)
+
+        # ToDo:: this is not using threading. Change the setting name
         if settings.enable_threading == "yes":
             chunks = [0] * 10
             for i, row in self.learn.iterrows():
@@ -113,9 +120,12 @@ class Fitness:
                 if j == 11:
                     print(i, int(len(self.learn.index)), int(i / (len(self.learn.index) / 10)))
                     exit()
-
-                error = self.eval(sequence, actual_fitness, individual)
-                chunks[j] += error ** 2
+                if settings.fitness_alg == "RMSE":
+                    error = self.eval(sequence, actual_fitness, individual)
+                    chunks[j] += error ** 2
+                elif settings.fitness_alg == "correlation":
+                    prediction = self.eval(sequence, actual_fitness, individual, True)
+                    chunks[j] = prediction
 
             test = 0
             train = 0
