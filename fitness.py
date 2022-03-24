@@ -6,6 +6,7 @@ import settings
 import individual as I
 import math
 from threading import Thread
+from scipy import stats
 
 
 class Fitness:
@@ -107,46 +108,62 @@ class Fitness:
 
     def measureTotal(self, individual):
         self.resetIndividual(individual)
+        if settings.fitness_alg == "RMSE":
+            # ToDo:: this is not using threading. Change the setting name
+            if settings.enable_threading == "yes":
+                chunks = [0] * 10
+                for i, row in self.learn.iterrows():
+                    sequence = row[0]
+                    actual_fitness = row[1]
+                    j = int(i / (len(self.learn.index) / 10))
+                    if j == 10:
+                        j = 9
+                    if j == 11:
+                        print(i, int(len(self.learn.index)), int(i / (len(self.learn.index) / 10)))
+                        exit()
+                    error = self.eval(sequence, actual_fitness, individual)
+                    chunks[j] += error ** 2
 
-        # ToDo:: this is not using threading. Change the setting name
-        if settings.enable_threading == "yes":
-            chunks = [0] * 10
+                test = 0
+                train = 0
+                for i in range(10):
+                    test += chunks[i]
+                    for j in range(10):
+                        if i == j:
+                            continue
+                        train += chunks[j]
+
+                testSize = int(len(self.learn.index) / 10)
+                trainSize = len(self.learn.index) - testSize
+
+                train = train / trainSize / 10
+                test = test / testSize / 10
+
+                RMSE_train = math.sqrt(train)
+                RMSE_test = math.sqrt(test)
+                return RMSE_train, RMSE_test
+            else:
+                raise "uncharted territory"
+        elif settings.fitness_alg == "correlation":
+            predictions = []
+            CEST_measurements = []
             for i, row in self.learn.iterrows():
                 sequence = row[0]
                 actual_fitness = row[1]
-                j = int(i / (len(self.learn.index) / 10))
-                if j == 10:
-                    j = 9
-                if j == 11:
-                    print(i, int(len(self.learn.index)), int(i / (len(self.learn.index) / 10)))
-                    exit()
-                if settings.fitness_alg == "RMSE":
-                    error = self.eval(sequence, actual_fitness, individual)
-                    chunks[j] += error ** 2
-                elif settings.fitness_alg == "correlation":
-                    prediction = self.eval(sequence, actual_fitness, individual, True)
-                    chunks[j] = prediction
-
-            test = 0
-            train = 0
-            for i in range(10):
-                test += chunks[i]
-                for j in range(10):
-                    if i == j:
-                        continue
-                    train += chunks[j]
-
-            testSize = int(len(self.learn.index) / 10)
-            trainSize = len(self.learn.index) - testSize
-
-            train = train / trainSize / 10
-            test = test / testSize / 10
-
-            RMSE_train = math.sqrt(train)
-            RMSE_test = math.sqrt(test)
-            return RMSE_train, RMSE_test
+                CEST_measurements.append(actual_fitness)
+                _, prediction = self.eval(sequence, actual_fitness, individual, True)
+                predictions.append(prediction)
+            print("predictions: ", predictions)
+            print("CEST: ", CEST_measurements)
+            pearsonr = stats.pearsonr(predictions, CEST_measurements)
+            return pearsonr
         else:
-            raise "uncharted territory"
+            print(settings.fitness_alg)
+            raise "Uncharted territory"
+
+
+
+
 
     def predict(self, sequence, individual):
         raise "Make use of eval() instead of predict"

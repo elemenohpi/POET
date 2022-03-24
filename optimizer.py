@@ -65,6 +65,7 @@ class Optimizer:
 
             # To calculate the best fitness
             # Temporarily set the first member as the best member
+
             self.P.pop[0].fitness, self.P.pop[0].test = fitness.measureTotal(self.P.pop[0])
             bestIndividual = self.P.pop[0]
 
