@@ -8,6 +8,8 @@ import math
 from threading import Thread
 from scipy import stats
 
+import warnings
+warnings.filterwarnings('ignore')
 
 class Fitness:
     def __init__(self):
@@ -153,10 +155,10 @@ class Fitness:
                 CEST_measurements.append(actual_fitness)
                 _, prediction = self.eval(sequence, actual_fitness, individual, True)
                 predictions.append(prediction)
-            print("predictions: ", predictions)
-            print("CEST: ", CEST_measurements)
             pearsonr = stats.pearsonr(predictions, CEST_measurements)
-            return pearsonr
+            if math.isnan(pearsonr[0]):
+                return 1, 0
+            return 1 - pearsonr[0] ** 2, 0
         else:
             print(settings.fitness_alg)
             raise "Uncharted territory"
