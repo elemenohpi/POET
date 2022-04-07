@@ -22,15 +22,16 @@ gens = 10000
 epochs_means = []
 
 for i in range(1, 9):
-    path = "D:\\POETPaperPeerJRes\\poet" + str(i) + "res/output/evolution/"
+    # path = "D:\\POETPaperPeerJRes\\poet" + str(i) + "res/output/evolution/"
+    path = "D:\\POET_Correlation_April5\\" + str(i) + "/output/evolution/"
     files = [f for f in listdir(path) if isfile(join(path, f))]
-
     dataframes = []
     for file in files:
         file_tokens = file.split(".")
         if file_tokens[len(file_tokens) - 1] != "log":
             continue
         file = path + file
+        # print(file)
         df = pd.read_csv(file, index_col=0)
         # if df.size < 80000:
         #     print(file)
@@ -82,7 +83,7 @@ lambdas = range(1, 9)
 poly = PolyCollection(verts, facecolors=facecolors, alpha=.7)
 ax.add_collection3d(poly, zs=lambdas, zdir='y')
 
-ax.set(xlim=(0, gens), ylim=(1, 9), zlim=(0, 12),
-       xlabel='Generations', ylabel=r'Epoch', zlabel='Error (RMSE)')
+ax.set(xlim=(0, gens), ylim=(1, 9), zlim=(0, 1),
+       xlabel='Generations', ylabel=r'Epoch', zlabel='1 - R^2')
 
 plt.show()

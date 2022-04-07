@@ -116,13 +116,13 @@ def main():
             if ".csv" not in file:
                 continue
             filename = file.split(".")[0]
-            csv += filename + " Abs Error" + "," + filename + " Prediction,"
+            csv += filename + " Prediction,"
         csv = csv[:-1] + "\n"
         for seq_index, seq_fitness in enumerate(seq_fitness_tuples):
             row = ""
             row += str(seq_fitness[0]) + "," + str(seq_fitness[1]) + ","
             for individual_evals in individuals_evaluations:
-                row += str(round(individual_evals[seq_index][0], 2)) + "," + str(round(individual_evals[seq_index][1], 2)) + ","
+                row += str(round(individual_evals[seq_index], 2)) + ","
             row = row[:-1] + "\n"
             csv += row
         text_file = open("table.csv", "w")
@@ -220,12 +220,12 @@ def compareModels(paths):
         f = F.Fitness()
         fitness, test = f.measureTotal(model)
         avg += fitness
-        print("Pro-Predictor: Fitness (RMSE) of {}: {} test: {}".format(file, fitness, test))
+        print("Pro-Predictor: Fitness ({}) of {}: {} test: {}".format(settings.fitness_alg, file, fitness, test))
         if fitness < best:
             bestModel = file
             best = fitness
     avg /= len(paths)
-    print("Pro-Predictor: Best model: {} with RMSE: {} Average RMSE: {}".format(bestModel, best, avg))
+    print("Pro-Predictor: Best model: {} with {}: {} Average {}: {}".format(bestModel, settings.fitness_alg, best, settings.fitness_alg, avg))
     exit(1)
 
 

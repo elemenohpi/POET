@@ -27,6 +27,7 @@ class Individual:
 		self.usedRules = {}
 		self.fitness = 0
 		tempIndv = pd.read_csv(file)
+		# print(tempIndv)
 		tmpPatterns = tempIndv['pattern']
 		tmpWeights = tempIndv['weight']
 		try:

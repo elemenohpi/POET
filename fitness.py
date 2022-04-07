@@ -7,6 +7,7 @@ import individual as I
 import math
 from threading import Thread
 from scipy import stats
+import numpy as np
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -25,18 +26,28 @@ class Fitness:
     def model_vs_dataset(self, individuals):
         seq_fitness_tuples = []
         individuals_evaluations = []
+        values = []
 
         for i, row in self.learn.iterrows():
             # row[0] is seq and row[1] is fitness
             seq_fitness_tuples.append((row[0], row[1]))
+            values.append(row[1])
 
         for individual in individuals:
-            err_pre_tuples = []
+            predictions = []
+            responses = []
             for seq_fit_tuple in seq_fitness_tuples:
                 error, prediction = self.eval(seq_fit_tuple[0], seq_fit_tuple[1], individual, True)
-                err_pre_tuples.append((error, prediction))
-            individuals_evaluations.append(err_pre_tuples)
-
+                predictions.append(prediction)
+            if settings.fitness_alg == "correlation":
+                align = np.polyfit(predictions, values, 1)
+                for prediction in predictions:
+                    response = prediction * align[0] + align[1]
+                    responses.append(response)
+                individuals_evaluations.append(responses)
+            elif settings.fitness_alg == "RMSE":
+                individuals_evaluations.append(predictions)
+        # print(individuals_evaluations)
         return seq_fitness_tuples, individuals_evaluations
 
     def eval(self, sequence, actualFitness, individual, returnPrediction=False):
