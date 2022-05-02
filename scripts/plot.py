@@ -5,8 +5,10 @@ from os.path import isfile, join
 import matplotlib.pyplot as plt
 import numpy as np
 
+plot_gens = 1000
 
 def plotIt(path, title):
+    global plot_gens
     q25s = []
     q75s = []
     medians = []
