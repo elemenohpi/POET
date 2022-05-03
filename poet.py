@@ -1,43 +1,25 @@
-# POET: Protein Optimization Enhancing Tool
-# Authors: 
-#			Iliya Alavy - Department of Computer Science and Engineering - Michigan State University
-# 		    Alexander Bricco - Department of Bioengineering -  Michigan State University
-#			All Rights Reserved @ Michigan State University
-
 import argparse
-from os import listdir
-from os.path import isfile, join
+# from os import listdir
+# from os.path import isfile, join
 
-import pandas as pd
-import pop as Population
-import settings
-import optimizer as Optimizer
-import predictor as P
-import individual as I
-import math
-import fitness as F
-import os
-import random as R
-from subprocess import call
-import archivist as Archivist
-import pandas as pd
+# import pandas as pd
+# import pop as population
+# import optimizer as optimizer
+# import predictor as P
+# import individual as I
+# import math
+# import fitness as F
+import random as rand
+# from subprocess import call
+# import archivist as Archivist
+# import pandas as pd
+import eletility
 
 
-def main():
-    print("\n\n######################################################\n")
-    print("POET V2.0b \n")
-    print("######################################################\n")
-
-    print("Configuring the application...\n")
-
-    # Arguement descriptions
-    parser = argparse.ArgumentParser(
-        description='Finds a model to predict fitness value of any given protein sequence. Fitness can be manually defined to any protein characteristic but our main goal is to predict CEST ability of proteins')
-
-    parser.add_argument('-learn', default=settings.default_learn,
-                        help='Path to the learn data (format: csv, default: ' + settings.default_learn + ')')
-    parser.add_argument('-translation', default=settings.TT,
-                        help='Path to the translation table (format: csv, default: ' + settings.TT + ')')
+def add_arguments_to_parser(parser):
+    parser.add_argument('-learn', help='Path to the learn data (format: csv)')
+    parser.add_argument('-translation',
+                        help='Path to the translation table (format: csv, default: )')
     parser.add_argument('-pop',
                         help='Path to the initial population files. If not specified, this application uses random initial population as default (format: csv)')
     parser.add_argument('-model',
@@ -50,42 +32,69 @@ def main():
     parser.add_argument('-iter', help='Number of iterations to predict/find potential proteins')
     parser.add_argument('-hpcc', help="Number of replications you need to queue on hpcc. Uses the default config file")
     parser.add_argument('-o', help="Output file name")
-    parser.add_argument('-r', default=settings.runs, help='Number of GP iterations to find a model.')
+    parser.add_argument('-r', help='Number of GP iterations to find a model.')
     parser.add_argument('-seed', help='The random seed')
     parser.add_argument('-f',
                         help="Gets path to a model as it's input and returns the fitness of it")  # ToDo:: Code this part.
     parser.add_argument('-c', nargs='*', help="Compares the fitness of all given models")
     parser.add_argument('-al', nargs='*', help="Computes the average length of all given models")
-    parser.add_argument('-archive', nargs='*',
-                        help='Setups the default output directories if necessary and archives existing files/results')
+    # parser.add_argument('-archive', nargs='*',
+    #                     help='Setups the default output directories if necessary and archives existing files/results')
     parser.add_argument('-md',
                         help="Expects a model to be given. Returns a table of predictions, actual values and RMSE for that model")
+    parser.add_argument("-config", help="Takes the config file to configure the application")
+    return parser
 
+
+def manage_input(args):
+    configparser = eletility.ConfigParser()
+    if args.config:
+        config = configparser.read(args.config)
+    else:
+        config = configparser.read("config.ini")
+
+    if args.seed:
+        config["seed"] = int(args.seed)
+
+    if args.r:
+        # number of evolutionary generations
+        config["runs"] = int(args.r)
+
+    if args.o:
+        config["output_evo"] = args.o
+
+    return config
+
+
+def main():
+    print("\n\n######################################################\n")
+    print("POET V2.0b \n")
+    print("######################################################\n")
+
+    print("Configuring the application...\n")
+
+    # Argument descriptions
+    parser = argparse.ArgumentParser(
+        description='Finds a model to predict fitness value of any given protein sequence. Fitness can be manually defined to any protein characteristic but our main goal is to predict CEST ability of proteins')
+
+    parser = add_arguments_to_parser(parser)
     args = parser.parse_args()
 
-    # Read the tables
-    settings.learn_df = pd.read_csv(args.learn)
-    settings.TT = pd.read_csv(args.translation)
+    config = manage_input(args)
 
-    arch = Archivist.Archivist()
+    print(config["seed"])
 
-    if args.archive != None:
-        arch.setup(True)
-        print("Archiving completed Successfully!")
-        exit(1)
+    exit()
+
+    # # Read the tables
+    # settings.learn_df = pd.read_csv(args.learn)
+    # settings.TT = pd.read_csv(args.translation)
 
     # Setting up the random seed
-    if args.seed != None:
-        settings.seed = int(args.seed)
-    R.seed(settings.seed)
-
-    # total number of runs
-    if args.r != None:
-        settings.runs = int(args.r)
+    rand.seed(config["seed"])
 
     # output file name
-    if args.o != None:
-        settings.output_file_name = args.o
+
 
     # Should be after initializing the output file name ^^^
     arch.setup()
@@ -128,7 +137,6 @@ def main():
         text_file = open("table.csv", "w")
         n = text_file.write(csv)
         text_file.close()
-
 
         exit()
 
@@ -225,7 +233,8 @@ def compareModels(paths):
             bestModel = file
             best = fitness
     avg /= len(paths)
-    print("Pro-Predictor: Best model: {} with {}: {} Average {}: {}".format(bestModel, settings.fitness_alg, best, settings.fitness_alg, avg))
+    print("Pro-Predictor: Best model: {} with {}: {} Average {}: {}".format(bestModel, settings.fitness_alg, best,
+                                                                            settings.fitness_alg, avg))
     exit(1)
 
 

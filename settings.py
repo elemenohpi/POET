@@ -7,9 +7,6 @@ import random as R
 
 global rule_size, TT, default_learn, default_unseen, population_size, alphabet_size, maximum_rules_count, rule_value_min, rule_value_max
 
-config = configparser.ConfigParser()
-config.read('config.ini')
-
 # Parameter Initialization
 
 # Threading
