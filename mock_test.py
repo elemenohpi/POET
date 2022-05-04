@@ -1,7 +1,6 @@
 import fitness as F
 import individual as I
 import pandas as pd
-import settings
 import matplotlib.pyplot as plt
 import numpy as np
 

@@ -1,7 +1,6 @@
 # Authors: Iliya "eLeMeNOhPi" Alavy - Department of Engineering - Michigan State University
 # 		   Alexander Bricco - Department of Bioengineering -  Michigan State University
 import rule as Rule
-import settings
 import random as R
 import pandas as pd
 

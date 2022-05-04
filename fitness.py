@@ -2,7 +2,6 @@
 # 		   Alexander Bricco - Department of Bioengineering -  Michigan State University
 
 import random as R
-import settings
 import individual as I
 import math
 from threading import Thread

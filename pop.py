@@ -2,7 +2,6 @@
 # 		   Alexander Bricco - Department of Bioengineering -  Michigan State University
 
 import individual as Individual
-import settings
 
 class Population:
 	# constructor for random initialization
