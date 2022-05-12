@@ -29,26 +29,28 @@ def add_arguments_to_parser(parser):
                         help='Number of potential protein sequences you want the program to predict. Must be '
                              'jointly used with -seqsize and -iter', action="store_true")
 
-    parser.add_argument('-learn', help='Path to the learn data (format: csv)')
-    parser.add_argument('-translation',
-                        help='Path to the translation table (format: csv, default: )')
-    parser.add_argument('-pop',
-                        help='Path to the initial population files. If not specified, this application uses random initial population as default (format: csv)')
-    parser.add_argument('-model',
-                        help='Path to a generated model to determine a given protein\'s fitness. You will need to use -seq after this command')
-    parser.add_argument('-seq',
-                        help='A sequence to be tested using an already specified model. This command only runs if it\'s used jointly with the -model command')
-    parser.add_argument('-seqsize', help='Size of the protein sequences for prediction')
-    parser.add_argument('-iter', help='Number of iterations to predict/find potential proteins')
 
-    parser.add_argument('-f',
-                        help="Gets path to a model as it's input and returns the fitness of it")  # ToDo:: Code this part.
-    parser.add_argument('-c', nargs='*', help="Compares the fitness of all given models")
-    parser.add_argument('-al', nargs='*', help="Computes the average length of all given models")
-    # parser.add_argument('-archive', nargs='*',
-    #                     help='Setups the default output directories if necessary and archives existing files/results')
-    parser.add_argument('-md',
-                        help="Expects a model to be given. Returns a table of predictions, actual values and RMSE for that model")
+    #
+    # parser.add_argument('-learn', help='Path to the learn data (format: csv)')
+    # parser.add_argument('-translation',
+    #                     help='Path to the translation table (format: csv, default: )')
+    # parser.add_argument('-pop',
+    #                     help='Path to the initial population files. If not specified, this application uses random initial population as default (format: csv)')
+    # parser.add_argument('-model',
+    #                     help='Path to a generated model to determine a given protein\'s fitness. You will need to use -seq after this command')
+    # parser.add_argument('-seq',
+    #                     help='A sequence to be tested using an already specified model. This command only runs if it\'s used jointly with the -model command')
+    # parser.add_argument('-seqsize', help='Size of the protein sequences for prediction')
+    # parser.add_argument('-iter', help='Number of iterations to predict/find potential proteins')
+    #
+    # parser.add_argument('-f',
+    #                     help="Gets path to a model as it's input and returns the fitness of it")  # ToDo:: Code this part.
+    # parser.add_argument('-c', nargs='*', help="Compares the fitness of all given models")
+    # parser.add_argument('-al', nargs='*', help="Computes the average length of all given models")
+    # # parser.add_argument('-archive', nargs='*',
+    # #                     help='Setups the default output directories if necessary and archives existing files/results')
+    # parser.add_argument('-md',
+    #                     help="Expects a model to be given. Returns a table of predictions, actual values and RMSE for that model")
     return parser
 
 
@@ -93,6 +95,7 @@ def manage_input(args):
     if args.seed:
         config["seed"] = int(args.seed)
 
+    # Runs = Number of evolutionary generations
     if args.r:
         # number of evolutionary generations
         config["runs"] = int(args.r)
