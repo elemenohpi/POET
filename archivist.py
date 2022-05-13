@@ -3,10 +3,11 @@ import pandas as pd
 import datetime
 import shutil
 import sys
-
+import eletility
 
 class Archivist:
-	def __init__(self):
+	def __init__(self, config):
+		self.config = config
 		pass
 
 	def saveCSV(self, df, path, filename):
@@ -30,13 +31,13 @@ class Archivist:
 		file.close()
 
 	def saveEvo(self, string):
-		path = "./output/evolution/evo_log_{}.log".format(settings.output_file_name)
+		path = self.config["output_evo"]
 		file = open(path, "a")
 		file.write("{}\n".format(string))
 		file.close()
 
 	def saveModel(self, df):
-		path = "./output/model/model_{}.csv".format(settings.output_file_name)
+		path = self.config["output_model"]
 		df.to_csv(path)
 
 	def setup(self, archive=False):
@@ -51,56 +52,5 @@ class Archivist:
 		if not os.path.exists(archiveDir):
 			os.makedirs(archiveDir)
 
-		# # if archive, run this, else, clear the existing files and return.
-		# if not archive:
-		# 	# reset the output file
-		# 	open("{}/{}{}.log".format(evoLogDir, "evo_log_", settings.output_file_name), 'w').close()
-		# 	return
-		#
-		# evoLogs = os.listdir(evoLogDir)
-		# models = os.listdir(modelDir)
-		# slurms = os.listdir("./")
-		#
-		# archivePath = "{}/{}".format(archiveDir, datetime.date.today())
-		#
-		# try:
-		# 	if not os.path.exists(archivePath):
-		# 		os.makedirs(archivePath)
-		# 		os.makedirs("{}/{}".format(archivePath, "model"))
-		# 		os.makedirs("{}/{}".format(archivePath, "evolution"))
-		# except:
-		# 	raise ("Couldn't create the archive folder")
-		#
-		# for file in models:
-		# 	path = "{}/{}".format(modelDir, file)
-		# 	pathTo = "{}/{}/{}".format(archivePath, "model", file)
-		# 	# Make sure the file already doesn't exists.
-		# 	# ToDo:: Make this overwrite protection a bit smarter maybe? So it doesn't add the numbers to the end.
-		# 	tempPath = pathTo
-		# 	counter = 1
-		# 	while os.path.exists(tempPath):
-		# 		tempPath = pathTo + repr(counter)
-		# 		counter += 1
-		# 	pathTo = tempPath
-		# 	shutil.move(path, pathTo)
-		#
-		# for file in evoLogs:
-		# 	path = "{}/{}".format(evoLogDir, file)
-		# 	pathTo = "{}/{}/{}".format(archivePath, "evolution", file)
-		# 	# Make sure the file already doesn't exists.
-		# 	# ToDo:: Make this overwrite protection a bit smarter maybe? So it doesn't add the numbers to the end.
-		# 	tempPath = pathTo
-		# 	counter = 1
-		# 	while os.path.exists(tempPath):
-		# 		tempPath = pathTo + repr(counter)
-		# 		counter += 1
-		# 	pathTo = tempPath
-		# 	shutil.move(path, pathTo)
-		#
-		# for file in slurms:
-		# 	if ".out" not in file and ".err" not in file:
-		# 		continue
-		# 	pathTo = archivePath + "/"
-		# 	tempPath = pathTo
-		# 	if os.path.exists(tempPath):
-		# 		shutil.move(file, pathTo)
+		F = eletility.Files()
+		F.writeTruncate(self.config["output_evo"], "")

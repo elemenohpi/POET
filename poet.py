@@ -3,8 +3,8 @@ import argparse
 # from os.path import isfile, join
 
 # import pandas as pd
-# import pop as population
-# import optimizer as optimizer
+import pop as population
+import optimizer as optimizer
 import predictor as P
 import individual as I
 # import math
@@ -28,10 +28,14 @@ def add_arguments_to_parser(parser):
     parser.add_argument('-predict',
                         help='Number of potential protein sequences you want the program to predict. Must be '
                              'jointly used with -seqsize and -iter', action="store_true")
-
-
+    parser.add_argument('-f',
+                        help="Gets path to a model as it's input and returns the fitness of it")
+    parser.add_argument('-md',
+                        help="Expects a model to be given. Returns a table of predictions, actual values and RMSE for that model")
+    parser.add_argument('-c', nargs='*', help="Compares the fitness of all given models")
+    parser.add_argument('-al', nargs='*', help="Computes the average length of all given models")
     #
-    # parser.add_argument('-learn', help='Path to the learn data (format: csv)')
+    parser.add_argument('-learn', help='Path to the learn data (format: csv)')
     # parser.add_argument('-translation',
     #                     help='Path to the translation table (format: csv, default: )')
     # parser.add_argument('-pop',
@@ -43,15 +47,125 @@ def add_arguments_to_parser(parser):
     # parser.add_argument('-seqsize', help='Size of the protein sequences for prediction')
     # parser.add_argument('-iter', help='Number of iterations to predict/find potential proteins')
     #
-    # parser.add_argument('-f',
-    #                     help="Gets path to a model as it's input and returns the fitness of it")  # ToDo:: Code this part.
-    # parser.add_argument('-c', nargs='*', help="Compares the fitness of all given models")
-    # parser.add_argument('-al', nargs='*', help="Computes the average length of all given models")
+
+
+
     # # parser.add_argument('-archive', nargs='*',
     # #                     help='Setups the default output directories if necessary and archives existing files/results')
-    # parser.add_argument('-md',
-    #                     help="Expects a model to be given. Returns a table of predictions, actual values and RMSE for that model")
+
     return parser
+
+
+def manage_input(args):
+    configparser = eletility.ConfigParser()
+    if args.config:
+        config = configparser.read(args.config)
+    else:
+        config = configparser.read("config.ini")
+
+    if args.seed:
+        config["seed"] = int(args.seed)
+
+    # Runs = Number of evolutionary generations
+    if args.r:
+        # number of evolutionary generations
+        config["runs"] = int(args.r)
+
+    if args.o:
+        config["output_evo"] = args.o
+
+    if args.mo:
+        config["output_model"] = args.mo
+
+    if args.learn:
+        config["learn_data"] = args.learn
+
+    # get the fitness of a given model
+    if args.f:
+        raise "Testing needed"
+        modelFitness(args.f)
+
+    if args.md:
+        raise "Testing needed"
+        path = args.md
+        measure_dataset_against_models(path)
+        exit()
+
+    # compare a bunch of models
+    if args.c:
+        raise "Testing needed"
+        compare_models(args.c)
+        exit()
+
+    # run on hpcc
+    if args.hpcc:
+        hpcc()
+        exit(1)
+
+    if args.al:
+        raise "Testing needed"
+        averageLength(args.al)
+        exit()
+
+    if args.predict:
+        raise "Broken code"
+        print("Predicting proteins:\n================================".format(args.predict))
+        count = int(input("Enter prediction count: "))
+        seq_size = int(input("Enter protein sequences size: "))
+        iterations = int(input("Enter number of evolutionary iterations (Larger values results in more confident and "
+                               "yet similar predictions.\n Lower values makes room for novelty but the prediction might"
+                               " not be as accurate): "))
+        model = input("Enter the path to the predictor model: ")
+        predictor = P.Predictor(count, seq_size + 1, iterations, config, model)
+        predictor.predict()
+        exit()
+
+    return config
+
+
+def main():
+    print("\n\n######################################################\n")
+    print("POET V2.0b \n")
+    print("######################################################\n")
+
+    print("Configuring the application...\n")
+
+    # Argument descriptions
+    parser = argparse.ArgumentParser(
+        description='Finds a model to predict fitness value of any given protein sequence. Fitness can be manually defined to any protein characteristic but our main goal is to predict CEST ability of proteins')
+
+    parser = add_arguments_to_parser(parser)
+    args = parser.parse_args()
+
+    config = manage_input(args)
+    arch = archivist.Archivist(config)
+
+    # Setting up the random seed
+    rand.seed(config["seed"])
+
+    # Setups the architecture of the project ToDo:: Might be a good idea to improve this or remove it altogether
+    arch.setup()
+
+    pop = population.Population(config)
+    opt = optimizer.Optimizer(config, pop)
+    opt.optimize()
+
+
+    # elif args.pop == None and args.seq == None and args.model == None:
+
+    # elif args.seq != None and args.model != None:
+    #     proteinSeq = args.seq
+    #     modelPath = args.model
+    #     model = I.Individual()
+    #     model.makeFromFile(modelPath)
+    #     fObj = F.Fitness()
+    #     # prediction = fObj.predict(proteinSeq, model)
+    #     error, prediction = fObj.eval(proteinSeq, 12.7, model, True)
+    #     print(prediction)
+    # else:
+    #     raise ("Invalid arguements.")
+    #     pass
+    # return
 
 
 def measure_dataset_against_models(path):
@@ -84,146 +198,6 @@ def measure_dataset_against_models(path):
     text_file.close()
     pass
 
-
-def manage_input(args):
-    configparser = eletility.ConfigParser()
-    if args.config:
-        config = configparser.read(args.config)
-    else:
-        config = configparser.read("config.ini")
-
-    if args.seed:
-        config["seed"] = int(args.seed)
-
-    # Runs = Number of evolutionary generations
-    if args.r:
-        # number of evolutionary generations
-        config["runs"] = int(args.r)
-
-    if args.o:
-        config["output_evo"] = args.o
-
-    if args.mo:
-        config["output_model"] = args.mo
-
-    # get the fitness of a given model
-    if args.f:
-        # ToDo:: Test again
-        modelFitness(args.f)
-
-    if args.md:
-        # ToDo:: Test again
-        path = args.md
-        measure_dataset_against_models(path)
-        exit()
-
-    # compare a bunch of models
-    if args.c:
-        # ToDo:: Test again
-        compare_models(args.c)
-        exit()
-
-    # run on hpcc
-    if args.hpcc:
-        hpcc()
-        exit(1)
-
-    if args.al:
-        # ToDo:: Test again
-        averageLength(args.al)
-        exit()
-
-    # ToDo:: I never checked the prediction part
-    if args.predict:
-        print("Predicting proteins:\n================================".format(args.predict))
-        count = int(input("Enter prediction count: "))
-        seq_size = int(input("Enter protein sequences size: "))
-        iterations = int(input("Enter number of evolutionary iterations (Larger values results in more confident and "
-                               "yet similar predictions.\n Lower values makes room for novelty but the prediction might"
-                               " not be as accurate): "))
-        model = input("Enter the path to the predictor model: ")
-        predictor = P.Predictor(count, seq_size + 1, iterations, config, model)
-
-        exit()
-#         predictor.predict()
-#         return
-# elif args.pop == None and args.seq == None and args.model == None:
-#     pop = Population.Population()
-#     opt = Optimizer.Optimizer(pop)
-#     opt.optimize()
-# elif args.seq != None and args.model != None:
-#     proteinSeq = args.seq
-#     modelPath = args.model
-#     model = I.Individual()
-#     model.makeFromFile(modelPath)
-#     fObj = F.Fitness()
-#     # prediction = fObj.predict(proteinSeq, model)
-#     error, prediction = fObj.eval(proteinSeq, 12.7, model, True)
-#     print(prediction)
-# else:
-#     raise ("Invalid arguements.")
-#     pass
-# return
-
-    return config
-
-
-def main():
-    print("\n\n######################################################\n")
-    print("POET V2.0b \n")
-    print("######################################################\n")
-
-    print("Configuring the application...\n")
-
-    # Argument descriptions
-    parser = argparse.ArgumentParser(
-        description='Finds a model to predict fitness value of any given protein sequence. Fitness can be manually defined to any protein characteristic but our main goal is to predict CEST ability of proteins')
-
-    parser = add_arguments_to_parser(parser)
-    args = parser.parse_args()
-
-    config = manage_input(args)
-    arch = archivist.Archivist()
-
-    # Setting up the random seed
-    rand.seed(config["seed"])
-
-    # Should be after initializing the output file name ^^^
-    arch.setup()
-
-    exit()
-
-
-# # Read the tables
-# settings.learn_df = pd.read_csv(args.learn)
-# settings.TT = pd.read_csv(args.translation)
-
-# # Make a dictionary out of the translation table
-# for i, row in settings.TT.iterrows():
-# 	settings.dic[row[0]] = row[1]
-
-# # Translate the data using the translation table in case we are not using a numeric translation table
-# if not is_numeric():
-# 	for i, row in settings.learn_df.iterrows():
-# 		translatedSeq = ""
-# 		origSeq = row[0]
-# 		for j in range(len(origSeq)):
-# 			try:
-# 				translatedSeq += settings.dic[origSeq[j]]
-# 			except IndexError:
-# 				print("Could not find all the required data in the Translation Table. Exiting...")
-# 				exit(0)
-# 		settings.learn_df.iloc[i, 0] = translatedSeq
-
-
-# def is_numeric():
-# 	codes = settings.TT['code']
-# 	for i in range(codes.size):
-# 		try:
-# 			float(codes[i])
-# 		except ValueError:
-# 			return False
-# 	return True
 
 
 def modelFitness(path):
@@ -307,6 +281,7 @@ def hpcc():
 
     confirm = input("To confirm the above settings, enter YES ")
     if confirm.lower() != "yes":
+        print("Aborting!")
         exit()
 
     title = day + "-" + title
@@ -331,7 +306,8 @@ def hpcc():
     with open(config, "r") as cfile:
         content += "\n" + cfile.read()
 
-    raise "ToDo:: Add config file to the subdirectory"
+    file_handler = eletility.Files()
+    file_handler.writeTruncate(os.path.join(directory, "config.ini"), content)
 
     for i in range(reps):
         filename = os.path.join(subs_directory, "{}_{}.sb".format(title, i))
@@ -352,10 +328,10 @@ def hpcc():
             "#SBATCH --job-name {}_{}      # you can give your job a name for easier identification (same as -J)\n".format(
                 title, i))
         file.write(
-            "#SBATCH --error={}\\{}_{}.err      # you can give your job a name for easier identification (same as -J)\n".format(
+            "#SBATCH --error={}/{}_{}.err      # you can give your job a name for easier identification (same as -J)\n".format(
                 errors_directory, title, i))
         file.write(
-            "#SBATCH --output={}\\{}_{}.txt      # you can give your job a name for easier identification (same as -J)\n".format(
+            "#SBATCH --output={}/{}_{}.txt      # you can give your job a name for easier identification (same as -J)\n".format(
                 slurms_directory, title, i))
 
         # SBATCH --error=%j.err
@@ -363,9 +339,11 @@ def hpcc():
         file.write("module pandas\n")
         # file.write("module load GCC/6.4.0-2.28 OpenMPI  ### load necessary modules, e.g\n")
         file.write("cd ~/POET\n")
+        log_file_path = logs_directory + "/evo_{}.csv".format(i)
+        model_file_path = models_directory + "/model_{}.csv".format(i)
         file.write(
             "srun -n 1 python poet.py -config {} -r {} -o {} -mo {} -seed {}\n"
-            "".format(config, runs, logs_directory, models_directory, i + seed))
+            "".format(config, runs, log_file_path, model_file_path, i + seed))
         file.write("cd batch\n")
         file.write("scontrol show job $SLURM_JOB_ID     ### write job information to output file")
         file.close()
