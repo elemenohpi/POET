@@ -23,7 +23,7 @@ class Fitness:
         self.mode = int(config["pattern_mode"])  # 0 is the summation mode and 1 is the multiplication mode
         self.k = 0  # for 10-fold cross validation implementation
 
-    def model_vs_dataset(self, individuals):
+    def model_vs_dataset(self, config, individuals):
         seq_fitness_tuples = []
         individuals_evaluations = []
         values = []
@@ -39,13 +39,13 @@ class Fitness:
             for seq_fit_tuple in seq_fitness_tuples:
                 error, prediction = self.eval(seq_fit_tuple[0], seq_fit_tuple[1], individual, True)
                 predictions.append(prediction)
-            if settings.fitness_alg == "correlation":
+            if config["fitness_alg"] == "correlation":
                 align = np.polyfit(predictions, values, 1)
                 for prediction in predictions:
                     response = prediction * align[0] + align[1]
                     responses.append(response)
                 individuals_evaluations.append(responses)
-            elif settings.fitness_alg == "RMSE":
+            elif config["fitness_alg"] == "RMSE":
                 individuals_evaluations.append(predictions)
         # print(individuals_evaluations)
         return seq_fitness_tuples, individuals_evaluations
@@ -173,10 +173,6 @@ class Fitness:
             return 1 - pearsonr[0] ** 2, 0
         else:
             raise "Wrong fitness evaluation metric. 'correlation' or 'RMSE' are allowed values"
-
-
-
-
 
     def predict(self, sequence, individual):
         raise "Make use of eval() instead of predict"

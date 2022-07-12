@@ -47,9 +47,6 @@ def add_arguments_to_parser(parser):
     # parser.add_argument('-seqsize', help='Size of the protein sequences for prediction')
     # parser.add_argument('-iter', help='Number of iterations to predict/find potential proteins')
     #
-
-
-
     # # parser.add_argument('-archive', nargs='*',
     # #                     help='Setups the default output directories if necessary and archives existing files/results')
 
@@ -86,15 +83,14 @@ def manage_input(args):
         modelFitness(args.f)
 
     if args.md:
-        raise "Testing needed"
         path = args.md
-        measure_dataset_against_models(path)
+        measure_dataset_against_models(config, path)
         exit()
 
     # compare a bunch of models
     if args.c:
-        raise "Testing needed"
-        compare_models(args.c)
+        # ToDo:: double check the correlations vs. logs. Slightly different values are found in the results. I suspect it's due to either how the models are being saved or how the correlation function is returning the r value. could be a non-issue and caused by the cross validation.
+        compare_models(config, args.c)
         exit()
 
     # run on hpcc
@@ -108,14 +104,13 @@ def manage_input(args):
         exit()
 
     if args.predict:
-        raise "Broken code"
         print("Predicting proteins:\n================================".format(args.predict))
         count = int(input("Enter prediction count: "))
         seq_size = int(input("Enter protein sequences size: "))
         iterations = int(input("Enter number of evolutionary iterations (Larger values results in more confident and "
                                "yet similar predictions.\n Lower values makes room for novelty but the prediction might"
                                " not be as accurate): "))
-        model = input("Enter the path to the predictor model: ")
+        model = input("Enter the path to the predictor model(s): ")
         predictor = P.Predictor(count, seq_size + 1, iterations, config, model)
         predictor.predict()
         exit()
@@ -168,17 +163,17 @@ def main():
     # return
 
 
-def measure_dataset_against_models(path):
+def measure_dataset_against_models(config, path):
     files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
     models = []
     for file in files:
         if ".csv" not in file:
             continue
-        model = I.Individual()
+        model = I.Individual(config)
         model.makeFromFile(os.path.join(path, file))
         models.append(model)
-    f = F.Fitness()
-    seq_fitness_tuples, individuals_evaluations = f.model_vs_dataset(models)
+    f = F.Fitness(config)
+    seq_fitness_tuples, individuals_evaluations = f.model_vs_dataset(config, models)
     csv = "sequence,fitness,"
     for file in files:
         if ".csv" not in file:
@@ -209,11 +204,11 @@ def modelFitness(path):
     exit(1)
 
 
-def compare_models(paths):
+def compare_models(config, paths):
     paths = paths[0]
     files = [f for f in os.listdir(paths) if os.path.isfile(os.path.join(paths, f))]
 
-    model = I.Individual()
+    model = I.Individual(config)
     avg = 0
     best = 100000
     bestModel = ''
@@ -221,18 +216,19 @@ def compare_models(paths):
         filetokens = file.split(".")
         if filetokens[len(filetokens) - 1] != "csv":
             continue
-        file = paths + file
+        file = os.path.join(paths, file)
+        # file = paths + file
         model.makeFromFile(file)
-        f = F.Fitness()
+        f = F.Fitness(config)
         fitness, test = f.measureTotal(model)
         avg += fitness
-        print("Pro-Predictor: Fitness ({}) of {}: {} test: {}".format(settings.fitness_alg, file, fitness, test))
+        print("Pro-Predictor: Fitness ({}) of {}: {} test: {}".format(config["fitness_alg"], file, fitness, test))
         if fitness < best:
             bestModel = file
             best = fitness
     avg /= len(paths)
-    print("Pro-Predictor: Best model: {} with {}: {} Average {}: {}".format(bestModel, settings.fitness_alg, best,
-                                                                            settings.fitness_alg, avg))
+    print("Pro-Predictor: Best model: {} with {}: {} Average {}: {}".format(bestModel, config["fitness_alg"], best,
+                                                                            config["fitness_alg"], avg))
     exit(1)
 
 
@@ -279,7 +275,7 @@ def hpcc():
 
     print(confirmation_text)
 
-    confirm = input("To confirm the above settings, enter YES ")
+    confirm = input("To confirm the above settings, enter YES: ")
     if confirm.lower() != "yes":
         print("Aborting!")
         exit()

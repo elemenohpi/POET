@@ -19,6 +19,15 @@ class Individual:
 		self.test = 0
 		self.extra = {}
 
+	def remove_unexpressed(self):
+		to_be_removed = []
+		for index, rule in enumerate(self.rules):
+			if rule.status == 0:
+				to_be_removed.append(rule)
+		for rule in to_be_removed:
+			self.rules.remove(rule)
+
+
 	def makeFromFile(self, file):
 		# print ("Creating an Individual from file...")
 		self.rules = []

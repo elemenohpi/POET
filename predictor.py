@@ -1,8 +1,9 @@
+import os
 import fitness as F
 import random as R
 import individual as I
 import copy
-
+import pandas as pd
 
 class Sequence:
     def __init__(self, pattern, fitness):
@@ -15,14 +16,17 @@ class Sequence:
 class Predictor:
 
     def __init__(self, count, size, iterations, config, model_path):
-        self.prediction_model = model_path
+        self.config = config
+        self.model_path = model_path
         self.count = count
         self.size = size
         self.iterations = iterations
         self.pop = []
         self.output = []
         self.popSize = 10
-        self.codes = settings.TT['key']
+        codes = pd.read_csv("data/translation/amino_to_amino.csv")
+        codes = codes["code"].tolist()
+        self.codes = codes
         self.hydroDic = {
             "I": -0.31,
             "L": -0.56,
@@ -49,30 +53,24 @@ class Predictor:
         pass
 
     def predict(self):
-        # self.populate()
-        # self.sort()
-        # for i in range(self.count):
-        # 	print(self.pop[i].pattern+" -> "+str(self.pop[i].fitness))
-        # pass
+        objF = F.Fitness(self.config)
+        files = [f for f in os.listdir(self.model_path) if os.path.isfile(os.path.join(self.model_path, f))]
+        ensemble = []
+        for model in files:
+            if model.split(".")[-1] != "csv":
+                continue
+            individual = I.Individual(self.config)
+            individual.makeFromFile(os.path.join(self.model_path, model))
+            # individual.remove_unexpressed()
+            ensemble.append(individual)
 
-        objF = F.Fitness()
-        individual = I.Individual()
-        individual.makeFromFile(self.prediction_model)
-
-        print("Model Rules:")
-        rules = []
-        for rule in individual.rules:
-            if rule.status == 1:
-                rules.append(rule)
-
-        rules = self.sort_rules(rules)
-
-        for rule in rules:
-            print(round(rule.weight, 2), " ", rule.pattern, " ", rule.status)
-
-        self.populate()
+        self.populate(ensemble)
 
         self.sort()
+
+        learn_data = pd.read_csv(self.config["learn_data"])
+        data_set_rules = learn_data["sequence"].tolist()
+
         for i in range(self.count):
             print(repr(i + 1) + ":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness, 2))
 
@@ -97,10 +95,21 @@ class Predictor:
                 newseq.pattern = newseq.pattern[:randomsite] + newamino + newseq.pattern[randomsite + 1:]
                 # print(seq.pattern)
                 # print(newseq.pattern)
-                tempF = objF.predict(newseq.pattern, individual)
+                if newseq.pattern in data_set_rules:
+                    fitness = 0
+                    print("\n already in the dataset \n")
+                elif self.hydrophobic(newseq.pattern):
+                    fitness = 0
+                else:
+                    fitness = 0
+                    for model in ensemble:
+                        _, tempF = objF.eval(newseq.pattern, 0, model, True)
+                        fitness += tempF
+                    fitness /= len(ensemble)
+
                 # print("tempF", tempF)
-                if tempF > seq.fitness:
-                    newseq.fitness = tempF
+                if fitness > seq.fitness:
+                    newseq.fitness = fitness
                     # print(seq.pattern + " -> " + newseq.pattern + " | fitness: " + repr(seq.fitness) + " -> " + repr(newseq.fitness) )
                     self.pop[myi] = newseq
                     improvement = True
@@ -126,13 +135,11 @@ class Predictor:
     # self.size
     # self.count
 
-    def populate(self):
+    def populate(self, ensemble):
         print("Populating the sequence pool...\n")
         # Read the best model and turn it to an individual
-        individual = I.Individual()
-        individual.makeFromFile(settings.prediction_model)
 
-        objF = F.Fitness()
+        objF = F.Fitness(self.config)
         for i in range(self.popSize):
             pattern = ""
             if self.size <= 0:
@@ -141,10 +148,15 @@ class Predictor:
                 rand = R.randint(0, len(self.codes) - 1)
                 pattern += self.codes[rand]
             if self.hydrophobic(pattern):
-                tempF = 0
+                fitness = 0
             else:
-                tempF = objF.predict(pattern, individual)
-            sequence = Sequence(pattern, tempF)
+                fitness = 0
+                for model in ensemble:
+                    _, tempF = objF.eval(pattern, 0, model, True)
+                    fitness += tempF
+                fitness /= len(ensemble)
+
+            sequence = Sequence(pattern, fitness)
             self.pop.append(sequence)
 
     def hydrophobic(self, pattern):
