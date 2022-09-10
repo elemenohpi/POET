@@ -24,7 +24,7 @@ class Plotter:
 			files = [f for f in listdir(path) if isfile(join(path, f))]
 			for file in files:
 				extension = file.split(".")[-1]
-				if extension != "csv":
+				if extension != "log":
 					continue
 				file = join(path, file)
 				df = pd.read_csv(file, index_col=0)
@@ -32,7 +32,7 @@ class Plotter:
 					dataframes.append(df)
 				else:
 					print("data frame {} has {} rows and thus is disregarded".format(file, len(df.index)))
-				# print(len(df.index), file)
+			# print(len(df.index), file)
 			# exit()
 			for i in range(gens):
 				best_fitness_values_at_gen_i = []
@@ -40,7 +40,7 @@ class Plotter:
 					# print(df)
 					# exit()
 					try:
-						best_fitness_values_at_gen_i.append(df[" fitness"][i])
+						best_fitness_values_at_gen_i.append(df["best fitness"][i])
 					except:
 						print(df)
 						exit()
@@ -56,69 +56,21 @@ class Plotter:
 
 		x_axis_data = range(0, gens)
 
-		for line_data in all_directory_based_data:
+		# colors = ["C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
+		colors = ["#0570b0", "#3690c0", "#74a9cf", "#cc4c02", "#fe9929", "#dd3497", "#ae017e", "#7a0177"]
+		for data_index, line_data in enumerate(all_directory_based_data):
 			plt.fill_between(x_axis_data, line_data[1], line_data[2], alpha=.1, linewidth=0)
-			plt.plot(x_axis_data, line_data[3], linewidth=2.0, label=line_data[0])
-		plt.legend(loc='lower right')
+			plt.plot(x_axis_data, line_data[3], linewidth=2.0, label=line_data[0], color=colors[data_index])
+		plt.legend(loc='upper right')
 		plt.show()
-	# plt.savefig(output, dpi=300)
-
-
+# plt.savefig(output, dpi=300)
 
 
 plotter = Plotter()
 
-
-
-
-# ================================================================== Static Loop (solving a^20) ========================
-# plotter.plot_experiment(
-# 	["Output/29apr-statemprmse/Evo", "Output/29apr-staprogrmse/Evo"],
-# 	1000, "x^20 Problem with RMSE", "Generations", "Fitness", ["rmse_p", "rmse_s"])
-#
-# plotter.plot_experiment(
-# 	["Output/29apr-staprog/Evo", "Output/29apr-statemp/Evo"],
-# 	50, "x^20 Problem with Correlation", "Generations", "Fitness", ["correl_p", "correl_s"])
-
-# ================================================================== Dyna Loop (solving 2^a) ===========================
-
-# plotter.plot_experiment(
-# 	["Output/29apr-dynaprog/Evo", "Output/29apr-dynatemp/Evo"],
-# 	50, "2^x Problem with Correlation", "Generations", "Fitness", ["correl_p", "correl_s"])
-#
-# plotter.plot_experiment(
-# 	["Output/29apr-dynaprogrmse/Evo", "Output/29apr-dynatemprmse/Evo"],
-# 	1000, "2^x Problem with RMSE", "Generations", "Fitness", ["rmse_p", "rmse_s"])
-
-# ================================================================== Dyna Loop (solving a^b) ===========================
-#
-# plotter.plot_experiment(
-# 	["Output/29apr-powerprog/Evo", "Output/29apr-powertemp/Evo"],
-# 	1000, "x^y Problem with Correlation", "Generations", "Fitness", ["correl_p", "correl_s"])
-
-# plotter.plot_experiment(
-# 	["Output/29apr-powerprogrmse/Evo", "Output/29apr-powertemprmse/Evo"],
-# 	1000, "x^y Problem with RMSE", "Generations", "Fitness", ["rmse_p", "rmse_s"])
-
-# ================================================================== RL + Loop (Ant Problem) ===========================
-
-# plotter.plot_experiment(
-# 	["Output/29apr-ant-prog/Evo", "Output/29apr-ant-prog-const/Evo", "Output/29apr-ant-prog-const-reg/Evo"],
-# 	999, "Comparing Different QGP Settings for Solving the Ant Problem", "Generations", "Fitness", ["prog", "prog-const", "prog-const-reg"])
-
-# plotter.plot_experiment(
-# 	["Output/29apr-ant-spatio/Evo", "Output/29apr-ant-spatio-const/Evo", "Output/29apr-ant-spatio-const-reg/Evo"],
-# 	999, "Comparing Different QGP Settings for Solving the Ant Problem", "Generations", "Fitness", ["temporo", "temporo-const", "temporo-const-reg"])
-
-# plotter.plot_experiment(
-# 	["Output/29apr-ant-prog/Evo", "Output/29apr-ant-prog-const/Evo", "Output/29apr-ant-prog-const-reg/Evo", "Output/29apr-ant-spatio/Evo", "Output/29apr-ant-spatio-const/Evo", "Output/29apr-ant-spatio-const-reg/Evo"],
-# 	999, "Comparing Different Settings for Solving the Ant Problem", "Generations", "Fitness", ["prog", "p_const", "p_const_math", "spatial", "s_const", "s_const_math"])
-
-# ================================================================== State/Decision Making (TicTacToe) ===========================
-
 plotter.plot_experiment(
-	["Output/TicTacToe/Evo"],
-	500, "Evolution of Models for Solving the TicTacToe Problem", "Generations", "Fitness", ["prog"])
-
-
-
+	["D:\\POETPaperPeerJRes\\poet1res/output/evolution/", "D:\\POETPaperPeerJRes\\poet2res/output/evolution/",
+	 "D:\\POETPaperPeerJRes\\poet3res/output/evolution/", "D:\\POETPaperPeerJRes\\poet4res/output/evolution/",
+	 "D:\\POETPaperPeerJRes\\poet5res/output/evolution/", "D:\\POETPaperPeerJRes\\poet6res/output/evolution/",
+	 "D:\\POETPaperPeerJRes\\poet7res/output/evolution/", "D:\\POETPaperPeerJRes\\poet8res/output/evolution/"],
+	10000, "Evolution of POET Models in Each Epoch", "Generations", "Error (Training RMSE)", ["E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8"])
