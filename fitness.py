@@ -54,30 +54,39 @@ class Fitness:
         # This is the starting position of the sequence that we're looking at each time.
         pos = 0
         measuredFitness = 0.0  # Fitness of individual i
-        found = 0
+        timesFound = 0
+        seen = False
+        prevFound = set()
         # Check every rule
         for rule in individual.rules:
             reverse_pattern = rule.pattern[::-1]
-            found = 0
+            timesFound = 0
+            seen = False
             # check forward pattern
             pos = sequence.find(rule.pattern, 0)
             while pos != -1:
-                found += 1
+                seen = True
+                if pos not in prevFound:
+                    prevFound.add(pos)
+                    timesFound += 1
                 pos = sequence.find(rule.pattern, pos+1)
             # check backward pattern
             pos = sequence.find(reverse_pattern, 0)
             while pos != -1:
-                found += 1
+                seen = True
+                if pos not in prevFound:
+                    prevFound.add(pos)
+                    timesFound += 1
                 pos = sequence.find(reverse_pattern, pos+1)
-            # rule is found. Update its status and the usedRulesCount to avoid further computation
-            if (found > 0) and rule.status == 0:
+            # rule is timesFound. Update its status and the usedRulesCount to avoid further computation
+            if seen and rule.status == 0:
                 rule.status = 1
                 individual.usedRulesCount += 1
             # Check the multiplication/summation mode. We always use the summation mode tho. 
             if self.mode == 0:
-                measuredFitness += rule.weight * found
+                measuredFitness += rule.weight * timesFound
             elif self.mode == 1:
-                measuredFitness *= rule.weight * found
+                measuredFitness *= rule.weight * timesFound
             else:
                 raise "wrong mode"
 
