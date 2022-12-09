@@ -7,6 +7,7 @@ import pandas as pd
 import archivist as Archivist
 import copy
 import random as R
+import numpy as np
 import individual as I
 import rule as Rule
 import time
@@ -241,6 +242,29 @@ class Optimizer:
 			# To Log the time
 			end_time = int(round(time.time() * 1000)) - start_time
 		# print(end_time)
+		data = []
+		for rule in elite.rules:
+			data.append([rule.pattern, rule.weight, rule.status])
+		df = pd.DataFrame(data, columns=['pattern', 'weight', 'status'])
+		arch.saveModel(df)
+		path = self.config["output_model"]+"-all"
+		df.to_csv(path, index=False)
+		print()
+		onesl, uniquesl = [], []
+		for model in self.P.pop:
+			data = []
+			for rule in model.rules:
+				data.append([rule.pattern, rule.weight, rule.status])
+			df = pd.DataFrame(data, columns=['pattern', 'weight', 'status'])
+			df.to_csv(path, mode='a', index=False, header=False)
+			uniques = df.pattern.unique().tolist()
+			numunique = len(uniques)
+			numpattern = len(df.pattern)
+			histogram = sorted([sum(df.pattern == e) for e in uniques], reverse=True)
+			print(f"{numunique} / {numpattern}: {histogram}")
+			onesl.append(histogram.count(1))
+			uniquesl.append(numunique)
+		print(np.mean(onesl), np.mean(uniquesl))
 		pass
 
 	def sort_tournament(self, t):
