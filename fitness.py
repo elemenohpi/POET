@@ -79,10 +79,10 @@ class Fitness:
                     timesFound += 1
                 pos = sequence.find(reverse_pattern, pos+1)
             # rule is timesFound. Update its status and the usedRulesCount to avoid further computation
+            rule.status = seen
             if seen and rule.status == 0:
-                rule.status = 1
                 individual.usedRulesCount += 1
-            # Check the multiplication/summation mode. We always use the summation mode tho. 
+            # Check the multiplication/summation mode. We always use the summation mode tho.
             if self.mode == 0:
                 measuredFitness += rule.weight * timesFound
             elif self.mode == 1:

@@ -78,16 +78,7 @@ class Individual:
 		pass
 
 	def bubbleSort(self):
-		n = len(self.rules)
-		# Traverse through all array elements
-		for i in range(n):
-			# Last i elements are already in place
-			for j in range(0, n - i - 1):
-				# traverse the array from 0 to n-i-1
-				# Swap if the element found is greater
-				# than the next element
-				if len(self.rules[j].pattern) < len(self.rules[j + 1].pattern):
-					self.rules[j], self.rules[j + 1] = self.rules[j + 1], self.rules[j]
+		self.rules.sort(key=lambda x: len(x.pattern), reverse=True)
 
 	def print(self):
 		for kh, rule in enumerate(self.rules):
