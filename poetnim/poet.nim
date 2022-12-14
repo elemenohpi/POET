@@ -6,6 +6,7 @@ from sugar import collect
 from algorithm import sort, SortOrder
 from std/decls import byaddr
 import times # for benchmarking
+import os
 
 ## community libraries
 import seqmath # math ops defined for lists
@@ -14,7 +15,7 @@ import flatty # serialization
 
 
 const
-  GENS = 1_000
+  GENS = 2_000
   POPULATION_SIZE = 100
   RULE_WEIGHT_MIN = 0.0
   RULE_WEIGHT_MAX = 10.0
@@ -64,6 +65,17 @@ when defined(shrinkend):
   echo "-d:shrinkend (on)"
 else:
   echo "-d:shrinkend (off)"
+
+
+## enables evaluating all rules, regardless
+## if they have been found in the target sequence
+## already at that position
+when defined(evalallrules):
+  echo "-d:evalallrules (on)"
+  const EVAL_ALL_RULES = true
+else:
+  echo "-d:evalallrules (off)"
+  const EVAL_ALL_RULES = false
 
 
 iterator mitemsReverse*[T](a: var openArray[T]): var T {.inline.} =
@@ -243,7 +255,7 @@ proc sort(models: var seq[Model]) =
   for model in models.mitems:
     sort model
 
-
+var globalCounter = 1
 proc predict(mdl: var Model, target: string): float =
   ## returns score, and sets status bit of model
   ## Note: assumes mdl rules are sorted longest to shortest rule
@@ -260,19 +272,16 @@ proc predict(mdl: var Model, target: string): float =
   var pos: int # index of found position
   var poslist = newSeqOfCap[int](12)
   var timesFound: int
-  var seen: bool
-  for rule in mdl.rules.mitems:
+  for rulei,rule in mdl.rules.mpairs:
     let pattern = rule.pattern.`$`
     let patternR = rule.pattern.`$`.reversed
     timesFound = 0
-    seen = false
     # find forward pattern
     pos = target.find(pattern, start=0)
     while pos != NO_POS:
       #prevFound.incl pos
       #inc forwardFound
-      seen = true
-      if pos notin prevFound:
+      if (pos notin prevFound) or EVAL_ALL_RULES:
         prevFound.incl pos
         inc timesFound
       pos = target.find(pattern, start=pos+1)
@@ -281,13 +290,14 @@ proc predict(mdl: var Model, target: string): float =
     while pos != NO_POS:
       #prevFound.incl pos
       #inc backwardFound
-      seen = true
-      if pos notin prevFound:
+      if (pos notin prevFound) or EVAL_ALL_RULES:
         prevFound.incl pos
         inc timesFound
       pos = target.find(patternR, start=pos+1)
     result += rule.weight * timesFound.float
-    rule.status = seen
+    if timesFound.bool and rule.status == false:
+      rule.status = true
+    #mdl.rules[rulei].status = seen
 
 
 proc mutate(mdl: var Model) =
@@ -417,6 +427,9 @@ proc evaluate(mdl: var Model, data: Data) =
     ydata[data.len] = newSeq[float](data.len)
     for datum_i, datum in data:
       ydata[data.len][datum_i] = datum.score
+  # reset all rule status
+  for rule in mdl.rules.mitems:
+    rule.status = false
   for datum_i, datum in data:
     x[datum_i] = mdl.predict datum.sequence
   let r = pearsonr(x,ydata[data.len])
@@ -450,7 +463,7 @@ proc rmse(mdl: var Model, data: Data):float =
     ydata[data.len] = newSeq[float](data.len)
     for datum_i, datum in data:
       ydata[data.len][datum_i] = datum.score
-  x = mdl.predict(data)
+  x = predict(mdl,data)
   let rmse = rmse(x,ydata[data.len])
   return rmse
 
@@ -643,20 +656,21 @@ proc main =
 
   ## used to manually load a model and test it
   #block:
-  #  let model = loadPyModel("models/model/model_2.csv") # example loading pyPOET formatted data
+  #  var model = loadPyModel("models/model/model_2.csv") # example loading pyPOET formatted data
   #  let data = loadPyData("data/learn8.csv") # example loading pyPOET formatted model
-  #  var model = load("best.mdl") # example other kind of loading/saving
+  #  #var model = load("best.mdl") # example other kind of loading/saving
   #  model.evaluate(data)
   #  echo model
   #  echo &"fitness: {model.fitness}"
   #  echo &"rmse (train): {model.rmse(data)}"
   #  echo &"rmse ( test): {model.rmse(testData)}"
+  #  echo ""
   #  #let predictions = model.predict(testData)
   #  #let r = pearsonr(predictions, testData.mapIt(it.score))
   #  #echo r*r
   #  quit(0)
 
-  randomize() # randomize the seed, provide int arg to set seed
+  randomize(getCurrentProcessId()) # randomize the seed, provide int arg to set seed
 
   var models = makePopulation()
   var newModels = newSeq[Model](models.len)
@@ -715,13 +729,16 @@ proc main =
   ## The last 2 numbers at the bottom are the
   ## average number of length-1 rules, and average number of unique rules
   ## this "signature" was used to compare to python and validate the algorithm
-  var ones, uniques: seq[int]
+  var stati, first, ones, uniques: seq[int]
   for model in models:
     let hist = model.rules.hist.sorted(order=SortOrder.Descending)
-    echo &"{model.rules.unique.len} / {model.rules.len}: {hist}"
+    #echo &"{model.rules.unique.len} / {model.rules.len}: {hist}"
     ones.add hist.count(1)
     uniques.add model.rules.unique.len
-  echo &"{ones.mean.formatFloat(ffDecimal,2)} {uniques.mean.formatFloat(ffDecimal,2)}"
+    if hist.len >= 1:
+      first.add hist[0]
+  stati.add models[0].rules.mapIt(it.status).count(true)
+  echo &"{ones.mean.formatFloat(ffDecimal,2)} {uniques.mean.formatFloat(ffDecimal,2)} {first.mean.formatFloat(ffDecimal,2)} {stati[0]}"
 
   ## save all models
   for i,model in models:
