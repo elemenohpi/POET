@@ -1,4 +1,4 @@
-import tables, sequtils, algorithm, strformat, strutils, sets
+import tables, sequtils, strformat, strutils, sets
 import hashes
 from random import rand, randomize, sample
 from math import round, copySign, sqrt, sum
@@ -7,12 +7,21 @@ from algorithm import sort, SortOrder
 from std/decls import byaddr
 import times # for benchmarking
 import os
+import osproc
 
 ## community libraries
 import seqmath # math ops defined for lists
 import manu # matrix math
 import flatty # serialization
 
+## save compressed source with binary
+let TMP_FILE {.compiletime.} = joinPath(getTempDir(),"poetcode")
+let TMP_COMMAND {.compiletime.} = staticExec("gzip -c poet.nim > " & TMP_FILE)
+const GZIP_SOURCE_CODE = staticRead(TMP_FILE)
+proc logsource =
+  if not fileExists "poet.nim":
+    let response = execCmdEx("zcat", input = GZIP_SOURCE_CODE)
+    "poet.nim".writeFile response.output
 
 const
   GENS = 2_000
@@ -34,48 +43,20 @@ var
   UNUSED_SELECTION_CHANCE = 0.2
 
 
-## optional compile flags
-
-## general debug mode
-## provides extra checks, at runtime cost
-when defined(debug):
-  echo "-d:debug (on)"
-else:
-  echo "-d:debug (off)"
-
-## simulated annealing
-## for a variety of properties
-when defined(annealing):
-  echo "-d:annealing (on)"
-else:
-  echo "-d:annealing (off)"
-
-## deduplication of rules
-## removes duplicate patterns
-when defined(dedup):
-  echo "-d:dedup (on)"
-else:
-  echo "-d:dedup (off)"
-
-## enables the intended form
-## of model shrinking
-## 1) delete short-to-long unused rules
-## 2) delete short-to-long used rules
-when defined(shrinkend):
-  echo "-d:shrinkend (on)"
-else:
-  echo "-d:shrinkend (off)"
-
-
-## enables evaluating all rules, regardless
-## if they have been found in the target sequence
-## already at that position
 when defined(evalallrules):
-  echo "-d:evalallrules (on)"
   const EVAL_ALL_RULES = true
 else:
-  echo "-d:evalallrules (off)"
   const EVAL_ALL_RULES = false
+
+
+proc wipeconfig =
+  "config.txt".writeFile "" # zero out config
+
+proc logconfig(s: string) =
+  let file = open("config.txt", fmAppend)
+  defer: close file
+  file.writeLine s
+
 
 
 iterator mitemsReverse*[T](a: var openArray[T]): var T {.inline.} =
@@ -644,23 +625,92 @@ proc loadPyData(filename: string): Data =
     let fld = line.split(',')
     data.add Datum(sequence: fld[0], score: fld[1].parseFloat)
 
+proc loadNimModel(filename: string): Model =
+  ## specifically reads in nim-POET style saved models
+  ## that look like this:
+  #model 0
+  #pattern,weight,status (0.70)
+  #IDDS,6.14,0
+  #FYKN,8.32,0
+  let model {.byaddr.} = result # readability convenience
+  var line: string
+  let file = open filename
+  defer: close file
+  # skip header lines
+  discard file.readLine(line)
+  discard file.readLine(line)
+  # read file
+  while file.readLine(line):
+    if line.len == 0: continue
+    let fld = line.split(',')
+    model.add Rule(pattern: fld[0], weight: fld[1].parseFloat, status: fld[2].parseInt.bool)
+
 proc main =
-  echo &"population size: {POPULATION_SIZE}"
-  echo &"rule count max: {RULE_COUNT_MAX}"
+
+  if paramCount() == 1 and (paramStr(1) in ["-s","--source"]):
+    logsource()
+    echo "source saved as 'poet.nim'"
+    quit(0)
+
+  wipeconfig()
+  ## optional compile flags
+  ## general debug mode
+  ## provides extra checks, at runtime cost
+  when defined(debug):
+    logconfig "-d:debug (on)"
+  else:
+    logconfig "-d:debug (off)"
+
+  ## simulated annealing
+  ## for a variety of properties
+  when defined(annealing):
+    logconfig "-d:annealing (on)"
+  else:
+    logconfig "-d:annealing (off)"
+
+  ## deduplication of rules
+  ## removes duplicate patterns
+  when defined(dedup):
+    logconfig "-d:dedup (on)"
+  else:
+    logconfig "-d:dedup (off)"
+
+  ## enables the intended form
+  ## of model shrinking
+  ## 1) delete short-to-long unused rules
+  ## 2) delete short-to-long used rules
+  when defined(shrinkend):
+    logconfig "-d:shrinkend (on)"
+  else:
+    logconfig "-d:shrinkend (off)"
+
+
+  ## enables evaluating all rules, regardless
+  ## if they have been found in the target sequence
+  ## already at that position
+  when defined(evalallrules):
+    logconfig "-d:evalallrules (on)"
+    const EVAL_ALL_RULES = true
+  else:
+    logconfig "-d:evalallrules (off)"
+    const EVAL_ALL_RULES = false
+
+  logconfig &"population size: {POPULATION_SIZE}"
+  logconfig &"rule count max: {RULE_COUNT_MAX}"
+  logconfig &"generations: {GENS}"
 
   ## load data
   let data = makeData(epochid = 9, epochop = OP.lt)
-  let testData = makeData(epochid = 9, epochop = OP.eq)
+  let testData = makeData(epochid = 0, epochop = OP.gt)
 
   var elite, best: Model
 
   ## used to manually load a model and test it
   #block:
-  #  var model = loadPyModel("models/model/model_2.csv") # example loading pyPOET formatted data
-  #  let data = loadPyData("data/learn8.csv") # example loading pyPOET formatted model
+  #  #var model = loadPyModel("models/model/model_2.csv") # example loading pyPOET formatted data
+  #  var model = loadNimModel("best.txt") # example loading pyPOET formatted data
   #  #var model = load("best.mdl") # example other kind of loading/saving
   #  model.evaluate(data)
-  #  echo model
   #  echo &"fitness: {model.fitness}"
   #  echo &"rmse (train): {model.rmse(data)}"
   #  echo &"rmse ( test): {model.rmse(testData)}"
@@ -678,10 +728,10 @@ proc main =
   ## sort
   sort models
 
-  echo &"generations: {GENS}"
-  let startTime = cpuTime()
+  when defined(timing):
+    let startTime = cpuTime()
 
-  echo "gen  fitness  max-rmse-train  max-rmse-test  max-#-rules  memory(bytes)"
+  echo "gen fitness max-rmse-train  max-rmse-test  max-num-rules  mem-bytes"
 
   for gen in 0..<GENS:
     ## evaluate all models
@@ -711,34 +761,19 @@ proc main =
       models[0] = elite
 
     ## periodic stuff, including progress output
-    if gen mod 10 == 0:
+    if gen mod 100 == 0:
       # annealing, works if compiled with flag 'annealing'
       interpolateProps(gen, GENS)
       best = models[0]
       stdout.write gen,' ',best.fitness.formatFloat(ffDecimal,4),' ',(best.rmse(data)).formatFloat(ffDecimal,4),' ',(best.rmse(testData)).formatFloat(ffDecimal,4),' ',best.rules.len,' '
       showmem(force=true)
 
-  let stopTime = cpuTime()
-  echo &"Elapsed Time: {(stopTime-startTime).round(2)}s"
+  when defined(timing):
+    let stopTime = cpuTime()
+    echo &"Elapsed Time: {(stopTime-startTime).round(2)}s"
 
   ## update status & fitness for displaying correct information
   evaluate(models,data)
-
-  ## num unique patterns vs total rules (number of repeats)
-  ## show the number of unique rules / total # of rules
-  ## The last 2 numbers at the bottom are the
-  ## average number of length-1 rules, and average number of unique rules
-  ## this "signature" was used to compare to python and validate the algorithm
-  var stati, first, ones, uniques: seq[int]
-  for model in models:
-    let hist = model.rules.hist.sorted(order=SortOrder.Descending)
-    #echo &"{model.rules.unique.len} / {model.rules.len}: {hist}"
-    ones.add hist.count(1)
-    uniques.add model.rules.unique.len
-    if hist.len >= 1:
-      first.add hist[0]
-  stati.add models[0].rules.mapIt(it.status).count(true)
-  echo &"{ones.mean.formatFloat(ffDecimal,2)} {uniques.mean.formatFloat(ffDecimal,2)} {first.mean.formatFloat(ffDecimal,2)} {stati[0]}"
 
   ## save all models
   for i,model in models:
