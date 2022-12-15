@@ -1,12 +1,13 @@
 # Authors: Iliya "eLeMeNOhPi" Alavy - Department of Engineering - Michigan State University
 # 		   Alexander Bricco - Department of Bioengineering -  Michigan State University
 
-import pop as Population
+import pop as population
 import fitness as F
 import pandas as pd
 import archivist as Archivist
 import copy
 import random as R
+import numpy as np
 import individual as I
 import rule as Rule
 import time
@@ -244,16 +245,8 @@ class Optimizer:
 		pass
 
 	def sort_tournament(self, t):
+		t.sort(key=lambda x: x.fitness)
 		n = len(t)
-		# Traverse through all array elements
-		for i in range(n):
-			# Last i elements are already in place
-			for j in range(0, n - i - 1):
-				# traverse the array from 0 to n-i-1
-				# Swap if the element found is greater
-				# than the next element
-				if t[j].fitness > t[j + 1].fitness:
-					t[j], t[j + 1] = t[j + 1], t[j]
 
 		if self.config["diversity_selection"] == "False":
 			return t
