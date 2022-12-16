@@ -1,52 +1,200 @@
-print('import Regex ok')
+#!/usr/bin/env python3
+# @autor: N. Scalzitti
+# @date: 11/01/2022
+
+### LIBRAIRIES ###
 import random
 import numpy as np
-'''
-def create_regex(size_regex, min_braces, max_braces):
-	indi = RegexPattern(size_regex, min_braces, max_braces)
+import csv
+import re
+
+
+### CONSTANTES ###
+
+# TODO: {m,n} implementer ca ?
+
+# OPCODE = { 'A':0, 'C':0, 'G':0, 'T':0, '.':0,
+# 		   '[':1, '{':1, '+':1, '^':1, # '*':1, '?':1
+# 		   '|':2, 'cat':2 }
+
+# ALPHABET = ["A", "C", "G", "T"]
+# LAST = ['A', 'C', 'G', 'T', '.']
+# OPERATOR = ['+', '{', '[', '|', 'cat', '^'] # remove '*' and '?'
+
+def open_file(file):
+	opcode = {}
+	alphabet = []
+	last = []
+	operator = []
+
+	with open(file,'r') as data:
+		for line in data:
+			line = line.strip().split(';')
+			cara = line[0]
+			arity = int(line[1])
+			opcode[cara] = arity
+
+	for k, v in opcode.items():
+		
+		if v == 1 or v == 2:
+			operator.append(k)
+
+		if v == 0 :
+			last.append(k)
+
+		if v == 0 and k != '.':
+			alphabet.append(k)
+
+	return opcode, operator, last, alphabet
+
+OPCODE, OPERATOR, LAST, ALPHABET = open_file("data/translation/alphabet.csv")
+
+### Individual generation  ###
+def indi_grow(depth, min_braces, max_braces):
+	'''
+	Create a new individual with GROW initialization method (heterogeneous branch)
+
+	depth: 		The depth of the tree shape (size of the regex)
+	min_braces: minimal value in braces
+	max_braces: maximal value in braces
+
+	return a regular expression
+	'''
+
+	indi = Grow(depth, min_braces, max_braces)
 	indi.build_grow_tree()
-	print(indi.tree)
 
-	return indi.tree2regex()
-'''	
-def indi_grow(size_regex, min_braces, max_braces):
-	indi = Grow(size_regex, min_braces, max_braces)
-	indi.build_grow_tree()
-	print(indi.tree)
+	return tree2regex(indi.tree), indi.tree
 
-	return indi.tree2regex()
+def indi_full(depth, min_braces, max_braces):
+	'''
+	Create a new individual with FULL initialization method (homogeneous branch)
 
+	depth: 		The depth of the tree shape (size of the regex)
+	min_braces: minimal value in braces
+	max_braces: maximal value in braces
 
-def indi_full(size_regex, min_braces, max_braces):
-	indi = Full(size_regex, min_braces, max_braces)
+	return a regular expression
+	'''
+
+	indi = Full(depth, min_braces, max_braces)
 	indi.build_full_tree()
-	print(indi.tree)
 
-	return indi.tree2regex()
+	return tree2regex(indi.tree), indi.tree
 
-def indi_half(size_regex, min_braces, max_braces):
+def indi_half(depth, min_braces, max_braces):
+	'''
+	Create a new individual with RAMPED HALF and HALF initialization method (homogeneous branch)
+
+	depth: 		The depth of the tree shape (size of the regex)
+	min_braces: minimal value in braces
+	max_braces: maximal value in braces
+
+	return a regular expression
+	'''
+
+	# Probability of 50% to iniate a individual with the Grow or Full method
 	x = np.random.choice([0,1], p=[0.5, 0.5])
 	if x == 1:
-		print('Type Grow')
-		return indi_grow(size_regex, min_braces, max_braces)
+		return indi_grow(depth, min_braces, max_braces)
 	else:
-		print('Type Full')
-		return indi_full(size_regex, min_braces, max_braces)
-
-# GROW: brnaches avec profondeurs variables
-# FULL: brnaches completes, on va jusau'a la profondeur max
-# RAMPED HALF-AND-HALF: 
+		return indi_full(depth, min_braces, max_braces)
 
 
 
-OPCODE = {'A':0, 'C':0, 'G':0, 'T':0, '.':0,
-		   '[':1 ,"{":1, "*":1,'^':1, #"+":1
-		  '|':2, 'cat':2}
+def build_regex(array):
+	'''
+	Transform the array in readable regex
+	array: the array of the regex
 
-ALPHABET = ["A", "C", "G", "T"]
-LAST = ['A', 'C', 'G', 'T', '.']
-OPERATOR = ['+', '{', '[', '*', '|', 'cat', '+', '^']
+	return the regex
+	'''
+	for i, node in enumerate(array):
+		if isinstance(node,list):
+			node = ''.join(node)
+			array[i] = "[" + node + "]"
 
+	regex = ''.join(array[1:-1]).replace("cat","")
+
+	return regex
+
+def explore_tree(tree, arr, index_node=0):
+	'''
+	Visit each node og a tree to obtain a readable array
+	Inspired by: https://en.wikipedia.org/wiki/Tree_traversal
+
+	tree: the tree shape to explore
+	arr: the tree shape is converted in array to obtain a regex
+	'''
+
+	# The node contain a value
+	if tree[index_node] != None:
+
+		if tree[index_node] in OPERATOR:
+			arr.append('(')
+		try:
+			explore_tree(tree, arr, index_node=(index_node*2)+1)
+		except:
+			pass
+
+		# Node is [] or [^]
+		if isinstance(tree[index_node], list):
+			arr.append(tree[index_node])
+		else:
+			if tree[index_node] == "[]":
+				pass
+			elif tree[index_node] == "[^]":
+				pass
+			else:
+				 arr.append(tree[index_node])
+
+		try:
+			explore_tree(tree, arr, index_node=(index_node*2)+2)
+		except:
+			pass
+
+		if tree[index_node] in OPERATOR:
+			arr.append(')')
+
+def tree2regex(tree):
+	'''
+	Convert a regex tree shape by an array
+
+	tree: the tree shape of the regex
+
+	return the regex
+	'''
+	array=[]
+	explore_tree(tree, array, index_node=0) # build the array to transform a tree shape in readable regex
+	regex = build_regex(array)
+
+	try:
+		re.compile(regex)
+	except:
+		return None
+
+	return regex
+
+
+
+def test():
+	'''
+	To test the different methods
+	'''
+	g = Grow(4,1,3)
+	g.build_grow_tree()
+	print('Grow: ', g.tree)
+	regex = tree2regex(g.tree)
+	print('Grow: ',regex)
+
+	f = Full(4,1,3)
+	f.build_full_tree()
+	print('Full: ',f.tree)
+	regex = tree2regex(f.tree)
+	print('Full: ',regex)
+
+
+#############
 
 class Full:
 
@@ -56,66 +204,112 @@ class Full:
 		self.tree = [0] * self.max_nodes # General structure of the tree
 		self.min_braces = min_braces
 		self.max_braces = max_braces
-		self.leaves = []
-		self.mid_layer = []
+		self.leaves = [] # nodes of the last layer
+		self.mid_layer = [] # nodes of the penultimate layer
+
+
 
 	def define_leaves_in_tree(self):
-		# Nodes in last layer
-		for i in range(2**(self.depth-1)):
-			self.leaves.append(self.max_nodes - i)
-		
-		# Before last layer nodes
-		for i in range(2**(self.depth-2)):
-			self.mid_layer.append((self.max_nodes - 2**(self.depth-1)) - i)
+		'''
+		Define which node belong to which layer
+		'''
 
-	def add_extra_leaf(self, proba=[0.3, 0.7]):
+		# print(type(2**(self.depth-2)), 2**(self.depth-2))
+		if self.depth == 1:
+			self.leaves.append(0)
+		elif self.depth == 0:
+			self.leaves.append(0)
+		else:
+			# Nodes in last layer
+			for i in range(2**(self.depth-1)):
+				self.leaves.append(self.max_nodes - i)
+			
+			# Before last layer nodes
+			for i in range(2**(self.depth-2)):
+				self.mid_layer.append((self.max_nodes - 2**(self.depth-1)) - i)
+		self.mid_layer = list(reversed(self.mid_layer))
+		self.leaves = list(reversed(self.leaves))
+
+
+	def add_extra_leaf(self, extra, proba=[0.3, 0.7]):
 		'''
-		Probability of (default) 30% to replace a None leaf by a leaf in LAST list
+		Probability of (default) 30% to replace a 'None' leaf by a leaf in LAST list
+		Increase the size and complexity of the Regex
+
+		extra: Activate or not the function
+		return a random leaf (30%) or a None leaf (70%) is the function is activate (extra=True), otherwise
+		return None
 		'''
-		x = np.random.choice([0,1], p=proba)
-		if x == 0:
-			return random.choice(LAST)
+		if extra:
+			x = np.random.choice([0,1], p=proba)
+			if x == 0:
+				return random.choice(LAST)
+			else:
+				return None
 		else:
 			return None
 
 	def add_leaf(self, i):
+
 		return random.choice(LAST)
 
-	def add_operator_arity1(self, i):
-		self.tree[i] = random.choice(['[]',"*",'[^]', 'cat', '|', '{'])
-		
-		if self.tree[i] == '[]':
-			self.tree[(i*2) + 1] = random.sample(ALPHABET, random.randint(1, len(ALPHABET)-1))
-			self.tree[(i*2) + 2] = self.add_extra_leaf() # or None
+	def add_operator_arity1(self, i, extra=False):
+		'''
+		Add a new operator with an arity of 1 or 2. That means the node i is in the second to last layer
 
-		elif self.tree[i] == '*':
-			self.tree[(i*2) + 1] = random.choice(LAST)
-			self.tree[(i*2) + 2] = self.add_extra_leaf() # or None
+		i: The current node in the tree
+		extra: activate or not the function to extend the regex
+		'''
 
-		elif self.tree[i] == '[^]':
+		# Generate a new random node
+		self.tree[i] = random.choice(OPERATOR) #['[]',"+",'[^]', 'cat', '|', '{']
+
+		if self.tree[i] == '[':
+			self.tree[i] = '[]'
+			self.tree[(i*2) + 1] = random.sample(ALPHABET, random.randint(1, len(ALPHABET)-1)) # child1=List
+			self.tree[(i*2) + 2] = None # self.add_extra_leaf(extra) # or None
+
+		elif self.tree[i] == '^':
+			self.tree[i] = '[^]'
 			self.tree[(i*2) + 1] = ['^']
 			self.tree[(i*2) + 1]+=random.sample(ALPHABET, random.randint(1, len(ALPHABET)-1))
-			self.tree[(i*2) + 2] = self.add_extra_leaf() # or None
+			self.tree[(i*2) + 2] = None # self.add_extra_leaf(extra) # or None
 
-		elif self.tree[i] == 'cat':
-			self.tree[(i*2) + 1] = random.choice(LAST)
-			self.tree[(i*2) + 2] = random.choice(LAST)
-		elif self.tree[i] == '|':
-			self.tree[(i*2) + 1] = random.choice(LAST)
-			self.tree[(i*2) + 2] = random.choice(LAST)
+		elif self.tree[i] == '+':
+			self.tree[(i*2) + 1] = random.choice(LAST) # ---------> pourrait egalement etre une liste
+			self.tree[(i*2) + 2] = None # self.add_extra_leaf(extra) # or None
 
 		elif self.tree[i] == '{':
 			x = random.randint(self.min_braces,self.max_braces) 
 			self.tree[i] = "{" + str(x) + "}"
 			self.tree[(i*2) + 1] = 0
-			self.tree[(i*2) + 2] = self.add_extra_leaf() # or None
-
+			self.tree[(i*2) + 2] = None # self.add_extra_leaf(extra) # or None
 		
+		elif self.tree[i] == 'cat':
+			self.tree[(i*2) + 1] = random.choice(LAST)
+			self.tree[(i*2) + 2] = random.choice(LAST)
 
+		elif self.tree[i] == '|':
+			self.tree[(i*2) + 1] = random.choice(LAST)
+			self.tree[(i*2) + 2] = random.choice(LAST)
+		
 	def add_operator_arity2(self, i):
+		'''
+		Add a new operator with an arity of 2. That means the node i is in an intermediate layer
+
+		i: The current node in the tree
+		'''
 		return random.choice(['cat', '|'])
 
-	def build_full_tree(self):
+	def build_full_tree(self, extra=True):
+		'''
+		Build the tree shape with FULL method
+		
+		extra: activate or not the function to extend the regex
+
+		return the tree in list format
+		'''
+
 		self.define_leaves_in_tree()
 
 		# Goes through all the nodes
@@ -124,140 +318,18 @@ class Full:
 				self.tree[node] = random.choice(['cat','|'])
 
 			else:
-				if self.tree[node] == 0:
-					if node+1 in self.leaves:
+				if self.tree[node] == 0: # Empty node
+					
+					if node+1 in self.leaves:      # last layer
 						self.tree[node] = self.add_leaf(node)
-		
-					elif node+1 in self.mid_layer:
-						self.add_operator_arity1(node)
-	
+
+					elif node+1 in self.mid_layer: # before last layer
+						self.add_operator_arity1(node, extra)
 					else:
-						# add operators	
-						self.tree[node] = self.add_operator_arity2(node)
+						self.tree[node] = self.add_operator_arity2(node) # other layers
 
-			'''
-			# New node case (value 0=never traversed by the algorithm)
-			if self.tree[i] == 0:
-				# Modify the current i node with an Operator
-				self.tree[i] = self.new_node(i) 
-				# Modify the child nodes, depending of the value of the Operator
-				self.add_child(i, OPCODE[self.tree[i]]) 
-				# print(self.tree) # temporary tree
-	
-			# Node with None value, means that parent node is a leaf (without children) 
-			elif self.tree[i] == None:
-				try:
-					self.tree[(i*2) + 1] = None
-					self.tree[(i*2) + 2] = None
-				except IndexError:
-					pass
-	
-			# All other cases
-			else:
-				self.add_child(i, 0)
-	
-		# Check if the last layer (leaf) has good value
-		self.check_last_layer()
-			'''
-		print(self.tree)
+		# print(self.tree)
 		return self.tree
-
-
-	def check_last_layer(self):
-		"""
-		Check if leaves (nodes in the last layer) are composed by only LAST values,
-		such as: Amino acids, nucleic acids, or joker (.). Operators like {}, | etc
-		can't be used in leaf node
-		"""
-
-		# Extract all leaves node (in the last layer)
-		for i in range(2**(self.depth-1)):
-			# If a leaf is a list, such as: [A, G] it is a good leaf
-			if isinstance(self.tree[-(i+1)], list):
-				pass
-			# If the leaf value is not in LAST list, then change the leaf value
-
-			# elif self.tree[-(i+1)] not in LAST or self.tree[-(i+1)] != None: # BUG !!
-				# print('ICI', self.tree[-(i+1)])
-			elif self.tree[-(i+1)] not in LAST and self.tree[-(i+1)] != None:
-				self.tree[-(i+1)] = random.choice(LAST)
-
-
-	def build_regex(self, arr):
-		for i, node in enumerate(arr):
-			if isinstance(node,list):
-				node = ''.join(node)
-				arr[i] = "[" + node + "]"
-		es = ''.join(arr[1:-1]).replace("cat","")
-		return es
-
-	def tree2regex(self):
-		array=[]
-		self.explore_tree(self.tree, array, index_node=0)
-
-		regex = self.build_regex(array)
-	
-		return regex
-
-	'''
-	def IsOperator(self, s):
-		"""
-		Vérifie si le caractère est un opérateur.
-		"""
-		if '+' in s:
-			return True
-		if '{' in s:
-			return True
-		if '[' in s:
-			return True
-		if '*' in s:
-			return True
-		if '|' in s:
-			return True
-		if 'cat' in s:
-			return True
-		if '+' in s:
-			return True
-		return False
-	'''
-
-	def explore_tree(self, tree, arr, index_node=0):
-
-		# The node contain a value
-		if tree[index_node] != None:
-
-			if tree[index_node] in OPERATOR:
-				arr.append('(')
-			# if self.IsOperator(tree[index_node]): # Si operator on ouvre les (
-			# 	arr.append('(')
-	
-			try:
-				self.explore_tree(tree, arr, index_node=(index_node*2)+1)
-			except:
-				pass
-	
-			# if tree[index_node] == "[]":
-			if isinstance(tree[index_node], list):
-				arr.append(tree[index_node])
-			else:
-				if tree[index_node] == "[]":
-					pass
-				elif tree[index_node] == "[^]":
-					pass
-				else:
-					 arr.append(tree[index_node])
-	
-			try:
-				self.explore_tree(tree, arr, index_node=(index_node*2)+2)
-			except:
-				pass
-
-			if tree[index_node] in OPERATOR:
-			# if self.IsOperator(tree[index_node]):
-				arr.append(')')
-
-
-
 
 
 class Grow:
@@ -269,6 +341,8 @@ class Grow:
 		self.min_braces = min_braces
 		self.max_braces = max_braces
 
+		# print(self.depth)
+
 
 	def new_node(self, i):
 		"""
@@ -276,38 +350,40 @@ class Grow:
 		the algorithm
 
 		i: the current node
+		return a value in OPCODE list
 		"""
-		# If the node is the root, add the concatenate node (+)
+
+		# Root node
 		if i == 0:
 			return random.choice(["cat","|"])
 		# Other node
 		else:
 			return random.choice(list(OPCODE.keys()))
 
-
 	def add_leaf(self, i):
 		"""
-		Add a value for specific operator like: [], {}, + or *. The node i take the value ([], {}, + or *)
+		Add a value for specific operator like: [], {}, + . The node i take the value ([], {}, +)
 		and the child node (i*2) +1 take an other value 
-		operator: [], {}, + or *
+		operator: [], {}, +
+
 		i: index/position of the element in the tree
+
+		return the node value
 		"""
 
 		operator = self.tree[i] # The current parent with arrity 1
 
-		# CASE [] and [^]
+		# CASE []
 		if operator == '[':	
 			# Return a k length (min=1) list of unique elements chosen from the ALPHABET. 
 			self.tree[(i*2) + 1] = random.sample(ALPHABET, random.randint(1, len(ALPHABET)-1))
 			return "[]" # add current nodes
-
+		
+		# CASE [^]
 		elif operator == '^':
 			self.tree[(i*2) + 1] = ['^']
-
-			# Return a k length (min=1) list of unique elements chosen from the ALPHABET. 
 			self.tree[(i*2) + 1]+=random.sample(ALPHABET, random.randint(1, len(ALPHABET)-1))
 			return "[^]" # add current nodes
-
 
 		# CASE {}
 		elif operator == "{":
@@ -317,11 +393,11 @@ class Grow:
 
 			return "{" + str(x) + "}" # add current node
 
-		# CASE * (Matches the preceding element zero or more times)
-		elif operator == "*":
-			self.tree[(i*2) + 1] = 0 #random.choice(elements)  # add a new child node
+		# # CASE * (Matches the preceding element zero or more times)
+		# elif operator == "*":
+		# 	self.tree[(i*2) + 1] = 0 #random.choice(elements)  # add a new child node
 
-			return "*" # add current node
+		# 	return "*" # add current node
 		
 		# CASE + (Matches the preceding element one or more times)
 		elif operator == "+":
@@ -331,7 +407,7 @@ class Grow:
 
 	def add_child(self, i, arity):
 		"""
-		Add X child(s), depending of the number of child (arity)
+		Add X child(s), depending of the number of ther arity of parent node
 
 		i: the current node in index i
 		arity: the number of child for the current node i
@@ -367,22 +443,26 @@ class Grow:
 		such as: Amino acids, nucleic acids, or joker (.). Operators like {}, | etc
 		can't be used in leaf node
 		"""
-
 		# Extract all leaves node (in the last layer)
 		for i in range(2**(self.depth-1)):
-			# If a leaf is a list, such as: [A, G] it is a good leaf
-			if isinstance(self.tree[-(i+1)], list):
-				pass
-			# If the leaf value is not in LAST list, then change the leaf value
-
-			# elif self.tree[-(i+1)] not in LAST or self.tree[-(i+1)] != None: # BUG !!!!!!!!!!
-				# print('ICI', self.tree[-(i+1)])
-			elif self.tree[-(i+1)] not in LAST and self.tree[-(i+1)] != None:
-				self.tree[-(i+1)] = random.choice(LAST)
-
+			x = random.choice([0,1]) # avec cette ligne on exploite le bug qui cree des regex interessante
+			x=0
+			if x == 1:
+				# If a leaf is a list, such as: [A, G] it is a good leaf
+				if isinstance(self.tree[-(i+1)], list):
+					pass
+				# If the leaf value is not in LAST list, then change the leaf value
+				# Si la profondeur =3 ou 4 par ex, alors ca genere des motifs interessant
+				# ex: (GTC.C.G)(T+)
+				elif self.tree[-(i+1)] not in LAST or self.tree[-(i+1)] != None: # BUG !!!!!!!!!!!!!!!!!
+					self.tree[-(i+1)] = random.choice(LAST)
+			else:
+				# If a leaf is a list, such as: [A, G] it is a good leaf
+				if isinstance(self.tree[-(i+1)], list):
+					pass
+				elif self.tree[-(i+1)] not in LAST and self.tree[-(i+1)] != None:
+					self.tree[-(i+1)] = random.choice(LAST)
 	
-
-
 	def build_grow_tree(self):
 		"""
 		Builds a tree representing an individual. The type of the tree is GROW
@@ -428,92 +508,6 @@ class Grow:
 
 		return self.tree
 
-	def build_regex(self, arr):
-		for i, node in enumerate(arr):
-			if isinstance(node,list):
-				node = ''.join(node)
-				arr[i] = "[" + node + "]"
-		es = ''.join(arr[1:-1]).replace("cat","")
-		return es
-
-	def tree2regex(self):
-		array=[]
-		self.explore_tree(self.tree, array, index_node=0)
-
-		regex = self.build_regex(array)
 	
-		return regex
-
-	'''
-	def IsOperator(self, s):
-		"""
-		Vérifie si le caractère est un opérateur.
-		"""
-		if '+' in s:
-			return True
-		if '{' in s:
-			return True
-		if '[' in s:
-			return True
-		if '*' in s:
-			return True
-		if '|' in s:
-			return True
-		if 'cat' in s:
-			return True
-		if '+' in s:
-			return True
-		return False
-	'''
-
-	def explore_tree(self, tree, arr, index_node=0):
-
-		# The node contain a value
-		if tree[index_node] != None:
-
-			if tree[index_node] in OPERATOR:
-				arr.append('(')
-			# if self.IsOperator(tree[index_node]): # Si operator on ouvre les (
-			# 	arr.append('(')
 	
-			try:
-				self.explore_tree(tree, arr, index_node=(index_node*2)+1)
-			except:
-				pass
-	
-			# if tree[index_node] == "[]":
-			if isinstance(tree[index_node], list):
-				arr.append(tree[index_node])
-			else:
-				if tree[index_node] == "[]":
-					pass
-				elif tree[index_node] == "[^]":
-					pass
-				else:
-					 arr.append(tree[index_node])
-	
-			try:
-				self.explore_tree(tree, arr, index_node=(index_node*2)+2)
-			except:
-				pass
-
-			if tree[index_node] in OPERATOR:
-			# if self.IsOperator(tree[index_node]):
-				arr.append(')')
-
-
-
-
-
-
-# if __name__ == '__main__':
-
-# 	# i = RegexPattern(4,1,5)
-# 	# i.tree = ['{', 'cat', '|', '^', 'cat', '|', 'cat', ['^', 'G'], None, 'T', 'T', 'G', '.', 'A', '.']
-# 	# print()
-# 	# print(i.tree2regex())
-# 	# exit()
-# 	a = Full(5,1,3)
-# 	a.build_full_tree()
-# 	print(a.tree2regex())
-
+# test()

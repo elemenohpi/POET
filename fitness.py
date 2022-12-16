@@ -12,16 +12,29 @@ import pandas as pd
 import warnings
 warnings.filterwarnings('ignore')
 
+from tqdm import tqdm
+import re
+import statistics
+
+
+
 class Fitness:
+
     def __init__(self, config):
         self.config = config
+
+        # Open training file
         try:
-            self.learn = pd.read_csv(config["learn_data"])
+            self.learn_file = pd.read_csv(config["learn_data"]) # data/learnall.csv by default
+            print(f'[INFO] Training data from {config["learn_data"]} are correctly loaded')
         except AttributeError:
-            print("WARNING: settings.learn_df is not set")
+            print("[ERROR] settings.learn_df is not set")
+            exit()
 
         self.mode = int(config["pattern_mode"])  # 0 is the summation mode and 1 is the multiplication mode
+                                                 # of the motif weights
         self.k = 0  # for 10-fold cross validation implementation
+
 
     def model_vs_dataset(self, config, individuals):
         seq_fitness_tuples = []
@@ -50,6 +63,79 @@ class Fitness:
         # print(individuals_evaluations)
         return seq_fitness_tuples, individuals_evaluations
 
+
+
+
+    def regex_eval(self, sequence, actualFitness, individual):
+        '''
+        function to evaluate each regex on the different sequence from the dataset
+
+        sequence: a training peptide sequence from the training file
+        actualFitness:
+        individual: the target individual for the evaluation
+
+        return: 
+        '''
+
+        measuredFitness = 0.0  # Fitness of individual i
+
+        # On evalue chaque regles de l'individu
+        for rule in individual.rules: # List of rules of the indiivdual
+            
+            nbr_match_motif = 0 # plus le nombre de match est grand, moins c'est bien
+            nbr_singleton = 0 # Match d'une seule lettre
+
+            singleton = False
+
+            try:
+                regex_rule = re.compile(rule.pattern) # la compilation des regex est redondante
+            except :
+                print('[ERROR] fitness.py 93', rule.pattern, rule.tree_shape)
+                exit()
+
+            # print('Evaluation de la regex',i, '-', rule.pattern)
+
+            # cherche les matches dans la sequence cible - correspondances non chevauchantes de l'expression
+            object_find = re.finditer(regex_rule, sequence)
+            full = 0
+
+            for match in object_find: # search motif len >=2 et <=6
+
+                motif = match.group()
+
+                if len(motif) > 1 and len(motif) <= 6:
+                    # print(match.span(),'---', motif, '+',len(motif), 'points' )
+                    nbr_match_motif+=1
+                    full += len(match.group())
+                    rule.score += len(match.group())
+
+                    if rule.status == 0:
+                        rule.status = 1
+                        individual.usedRulesCount += 1
+
+                # Size 1
+                elif len(match.group()) == 1:
+                    nbr_singleton+=1
+                    # print('taille 1',match,'---', match.span(),'---', match.group(), '-1 point')
+                    singleton = True
+
+            if full == len(sequence):
+                rule.score-=len(sequence)
+
+            # Aucun match n'a ete trouvé (Penalty) - les individus avec + de rules seront penalise
+            # if nbr_match_motif == 0 and nbr_singleton==0:
+            #     rule.score -= 1 
+
+            if singleton:
+                # print('Singleton -1')
+                rule.score -= 1
+
+            # print(f'SCORE de {rule.pattern} sur la sequence:',sequence, '=', rule.score)
+            measuredFitness += rule.score
+
+        return measuredFitness
+
+
     def eval(self, sequence, actualFitness, individual, returnPrediction=False):
         # This is the starting position of the sequence that we're looking at each time.
         pos = 0
@@ -57,24 +143,30 @@ class Fitness:
 
         # Iterate through the sequence
         while pos < len(sequence):
+            # print(pos, len(sequence))
+
             # Check every rule
             for rule in individual.rules:
                 # Find the length of the rule
                 try:
-                    length = len(rule.pattern)
+                    length_pattern = len(rule.pattern)
+                    # print(rule.pattern)
+
                 except:
+                    print('Empty rule')
                     # happens in the case of empty rules.
                     continue
 
                 # Continue if the rule length is more than the unchecked sequence length	
-                if length > (len(sequence) - pos) or length == 0:
+                if length_pattern > (len(sequence) - pos) or length_pattern == 0:
                     continue
+                
 
                 reverse_pattern = rule.pattern[::-1]
                 # Normal or Reverse
-                # print( rule.pattern, "vs", sequence[pos: (pos + length)])
-                if ((rule.pattern == sequence[pos: (pos + length)]) or reverse_pattern == sequence[
-                                                                                          pos: (pos + length)]):
+                # print( rule.pattern, "vs", sequence[pos: (pos + length_pattern)])
+                if ((rule.pattern == sequence[pos: (pos + length_pattern)]) or reverse_pattern == sequence[
+                                                                                          pos: (pos + length_pattern)]):
                     # rule is found. Update its status and the usedRulesCount to avoid further computation
 
                     if rule.status == 0:
@@ -104,11 +196,16 @@ class Fitness:
         return error
 
     def resetIndividual(self, individual):
+        '''
+        Reset values (usedRulesCount and rules.status) of an individual
+        '''
         individual.usedRulesCount = 0
+        individual.fitness = 0 # set the fitness
 
         # Make sure that every rule status is 0
         for rule in individual.rules:
             rule.status = 0
+            rule.score = 0
 
     def measure_dataset(self, individual):
         train_error = 0.0
@@ -125,9 +222,20 @@ class Fitness:
         return RMSE_train, 0
 
     def measureTotal(self, individual):
-        self.resetIndividual(individual)
+        """
+        Mesure the fitness value for 1 individual
+        """
+
+        self.resetIndividual(individual) # Reset rules.status/rule.score/fitness of an individual
+        
+        # print('je vais evaluer:')
+        # individual.print()
+        # print(f'avec une fitness: {individual.fitness}')
+        
         if self.config["fitness_alg"] == "RMSE":
+
             chunks = [0] * 10
+            print('Chunks',chunks)
             for i, row in self.learn.iterrows():
                 sequence = row[0]
                 actual_fitness = row[1]
@@ -158,6 +266,7 @@ class Fitness:
             RMSE_train = math.sqrt(train)
             RMSE_test = math.sqrt(test)
             return RMSE_train, RMSE_test
+
         elif self.config["fitness_alg"] == "correlation":
             predictions = []
             CEST_measurements = []
@@ -171,8 +280,27 @@ class Fitness:
             if math.isnan(pearsonr[0]):
                 return 1, 0
             return 1 - pearsonr[0] ** 2, 0
-        else:
-            raise "Wrong fitness evaluation metric. 'correlation' or 'RMSE' are allowed values"
+
+        elif self.config["fitness_alg"] == "regex":
+            CEST_measurements = []
+
+            for i, row in self.learn_file.iterrows(): # training data
+                # Training sequences and fitness values
+                sequence, training_fitness = row[0], row[1] 
+
+                # Add training (True) fitness values (repetitive !)
+                CEST_measurements.append(training_fitness)  
+                
+                # print('sequence', i, '=', sequence, 'fitness=', training_fitness)
+                # on evalue chaque rule de l'individu pour avoir 1 score par rule 
+                # et donc un score totale ou moyen final
+                score = self.regex_eval(sequence, training_fitness, individual)
+            
+            individual.fitness = score
+
+        
+
+
 
     def predict(self, sequence, individual):
         raise "Make use of eval() instead of predict"

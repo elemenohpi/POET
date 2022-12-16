@@ -24,7 +24,7 @@ class Population:
 		for i in range(self.size):
 			indv = Individual.Individual(self.config)
 			indv.init_pattern(self.init_method)
-
+			# indv.print()
 			self.pop.append(indv)
 
 	# Randomly initializes the population with formulas

@@ -7,6 +7,7 @@ import pandas as pd
 import eletility
 
 import regex
+import re
 
 
 
@@ -59,6 +60,20 @@ class Individual:
 			self.rules.append(rule)
 		pass
 
+
+
+	def check_pattern(self, pattern): # NS
+		if pattern == None:
+			return False
+		else:
+			# add all rules of the individual
+			try:
+				re.compile(pattern)
+				return True
+			except:
+				return False
+
+
 	def init_pattern(self, init_method):
 		# Load alphabet
 		codes = pd.read_csv("data/translation/amino_to_amino.csv")
@@ -69,38 +84,60 @@ class Individual:
 			# any value within the given interval [minWeight, maxWeight] (default 0-10) is equally likely to be drawn by uniform
 			weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
 
+
+
+
+
 			# Add these many rules according to the number of characters (ruleSize) to create the pattern
-			pattern = ""
-			for j in range(R.randint(1, self.ruleSize)):
-				# Rule size is calculated randomly, and now we need to select a random combination of codes with a specified size
-				randomchar = codes[R.randint(0, (len(codes) - 1))] # draw a random char
-				pattern += randomchar
+			# pattern = ""
+			# for j in range(R.randint(1, self.ruleSize)):
+			# 	# Rule size is calculated randomly, and now we need to select a random combination of codes with a specified size
+			# 	randomchar = codes[R.randint(0, (len(codes) - 1))] # draw a random char
+			# 	pattern += randomchar
+
+
+
 
 			# Create a new RE pattern
 			if init_method == 'half':
-				pattern_re = regex.indi_half(self.depth_tree, self.min_braces, self.max_braces)
+				pattern_re, tree = regex.indi_half(self.depth_tree, self.min_braces, self.max_braces)
+			
 			elif init_method == 'grow':
-				pattern_re = regex.indi_grow(self.depth_tree, self.min_braces, self.max_braces)
+				pattern_re, tree = regex.indi_grow(self.depth_tree, self.min_braces, self.max_braces)
+				# pattern_re, tree = regex.indi_grow(R.randint(2, self.depth_tree+1), self.min_braces, self.max_braces)
+
 			elif init_method == 'full':
-				pattern_re = regex.indi_full(self.depth_tree, self.min_braces, self.max_braces)
+				pattern_re, tree = regex.indi_full(self.depth_tree, self.min_braces, self.max_braces)
 			else:
-				print('Error for initialisation method, choose between: grow, full or half')
+				print('Initialisation method Error, choose between: grow, full or half')
 				exit()
 
-			rule = Rule.Rule(pattern_re, weight, 0)
 
-			# Create a Rule instance
-			# rule = Rule.Rule(pattern, weight, 0)
-			self.rules.append(rule)
 
-		self.bubbleSort() # Sort the array
+
+
+			# rule = Rule.Rule(pattern, weight, 0) # Create a Rule instance
+			# self.rules.append(rule)
+
+
+			if self.check_pattern(pattern_re):
+				rule = Rule.Rule(pattern_re, weight, 0, tree) # Create a Rule instance
+				
+				# checkpoint
+				if rule.tree_shape[0] != 'cat' and rule.tree_shape[0] != '|':
+					print('[ERROR] Root is incorrect:', rule.tree_shape)
+					exit()
+
+				self.rules.append(rule)
+
+		self.bubbleSort() # Sort the array according to the size of motifs
 
 
 	def init_formula(self):
 		raise Exception("uncharted territories")
 		pass
 
-	def bubbleSort(self):
+	def bubbleSort_old(self):
 		# Sort the array Rules. The first element has the highest size and the last the smallest size
 		n = len(self.rules)
 		# Traverse through all array elements
@@ -110,26 +147,108 @@ class Individual:
 				# traverse the array from 0 to n-i-1
 				# Swap if the element found is greater
 				# than the next element
-				if len(self.rules[j].pattern) < len(self.rules[j + 1].pattern):
-					self.rules[j], self.rules[j + 1] = self.rules[j + 1], self.rules[j]
+				try:
+					if len(self.rules[j].pattern) < len(self.rules[j + 1].pattern):
+						self.rules[j], self.rules[j + 1] = self.rules[j + 1], self.rules[j]
+				except TypeError:
+					print('[ERROR] indi.py l143')
+
+					print(self.rules[j].pattern)
+					print(self.rules[j+1].pattern)
+
+	# def get_leaf_nodes(self):
+
+		# last_layer = 0
+		# dict_layer = {}
+		# # from last layer to the root (reverse direction )
+		# for j, layer in enumerate(range(self.depth_tree-1, -1, -1)):
+	
+		# 	if j == 0:
+		# 		last_layer = layer+1
+	
+		# 	# Count all nodes in the layer
+		# 	for i in range (2**(self.depth_tree - (layer+1))):
+		# 		node+=1
+
+		# 		if (self.depth_tree-layer) not in dict_layer.keys():
+		# 			dict_layer[self.depth_tree-layer] = []
+		# 			dict_layer[self.depth_tree-layer].append(node-1)
+		# 		else:
+		# 			dict_layer[self.depth_tree-layer].append(node-1)
+
+		# return dict_layer[last_layer]
+
+	# def get_or_nodes(self, rule_tree):
+	# 	counter = 0
+	# 	for node in rule_tree:
+	# 		if node == '|':
+	# 			counter +=1
+	# 	return counter
+
+	def bubbleSort(self):
+		self.compute_complexity()
+		# Sort the array Rules. The first element has the highest size and the last the smallest size
+		n = len(self.rules)
+		# Traverse through all array elements
+		for i in range(n):
+			# Last i elements are already in place
+			for j in range(0, n - i - 1):
+				# traverse the array from 0 to n-i-1
+				# Swap if the element found is greater
+				# than the next element
+				try:
+					if self.rules[j].complexity < self.rules[j+1].complexity:
+						self.rules[j], self.rules[j + 1] = self.rules[j + 1], self.rules[j]
+				except TypeError:
+					print('[ERROR] indi.py l143')
+
+					print(self.rules[j].pattern)
+					print(self.rules[j+1].pattern)
+
+	def compute_complexity(self):
+		'''
+		on compte le nombre de feuille (sans les None) ainsi que le nombre de or |
+		puis on soustrait ce nombre au nombre de feuille pour avoir la complexity
+		'''
+
+		# Create a list with all leaf nodes
+		# leaves_list = self.get_leaf_nodes() 
+
+		for rule in self.rules:
+
+			nbr_leaf = 0
+			nbr_or = 0
+
+			for node in rule.tree_shape:
+				if node in regex.LAST:
+					nbr_leaf+=1
+				if type(node) == list:
+					nbr_leaf+=1
+				if node == '|':
+					nbr_or +=1
+
+			rule.complexity = nbr_leaf - nbr_or
+
+
 
 	def print(self):
 		for kh, rule in enumerate(self.rules):
-			print(f"{kh}- {rule.pattern} - {rule.weight} - {rule.status}")
+			print(f"{kh}- {rule.pattern} - {rule.weight} - {rule.status} - {rule.complexity} - {rule.score}")
+			# print(rule.tree_shape)
 
 
-def main():
-	configparser = eletility.ConfigParser()
-	config = configparser.read("config.ini")
+# def main():
+# 	configparser = eletility.ConfigParser()
+# 	config = configparser.read("config.ini")
 
-	new_indi = Individual(config)
-	init_method = 'half'
+# 	new_indi = Individual(config)
+# 	init_method = 'half'
 
-	new_indi.init_pattern(init_method)
+# 	new_indi.init_pattern(init_method)
 	
-	new_indi.print()
+# 	new_indi.print()
 
 
 
-if __name__ == '__main__':
-	main()
+# if __name__ == '__main__':
+# 	main()

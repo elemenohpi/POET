@@ -18,6 +18,9 @@ import eletility
 from datetime import date
 
 
+
+
+
 def add_arguments_to_parser(parser):
     parser.add_argument("-config", help="Takes the config file to configure the application")
     parser.add_argument('-o', help="Output file name. Include extension")
@@ -142,8 +145,11 @@ def main():
     arch.setup()
 
     pop = population.Population(config)
+    # for i in pop.pop: # display all individuals
+    #     print(i.print())
+    
     opt = optimizer.Optimizer(config, pop)
-    opt.optimize()
+    opt.optimize() # Optimize the population
 
 
     # elif args.pop == None and args.seq == None and args.model == None:
