@@ -15,13 +15,10 @@ import manu # matrix math
 import flatty # serialization
 
 ## save compressed source with binary
-let TMP_FILE {.compiletime.} = joinPath(getTempDir(),"poetcode")
-let TMP_COMMAND {.compiletime.} = staticExec("gzip -c poet.nim > " & TMP_FILE)
-const GZIP_SOURCE_CODE = staticRead(TMP_FILE)
 proc logsource =
+  const GZIP_SOURCE_CODE = staticRead "poet.nim"
   if not fileExists "poet.nim":
-    let response = execCmdEx("zcat", input = GZIP_SOURCE_CODE)
-    "poet.nim".writeFile response.output
+    "poet.nim".writeFile GZIP_SOURCE_CODE
 
 const
   GENS = 2_000
