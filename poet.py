@@ -146,8 +146,10 @@ def main():
 
     pop = population.Population(config)
     # for i in pop.pop: # display all individuals
-    #     print(i.print())
+    #     i.print()
+    # exit()
     
+    # Core of the evolution algorithm
     opt = optimizer.Optimizer(config, pop)
     opt.optimize() # Optimize the population
 

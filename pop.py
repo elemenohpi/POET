@@ -12,8 +12,7 @@ class Population:
 		self.pop = []
 		self.init_method = str(config["init_pop_met"])
 
-		print("Initializing a population with size of " + str(self.size) + "...\n")
-
+		print(f"Initializing a population with size of {self.size} and with method {self.init_method.upper()}\n")
 		print("Translation Table supports the PATTERN mode - Generating rules...\n")
 		self.populate_rules()
 			

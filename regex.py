@@ -8,6 +8,7 @@ import numpy as np
 import csv
 import re
 
+ALPHABET_FILE = "Zappo"
 
 ### CONSTANTES ###
 
@@ -22,10 +23,15 @@ import re
 # OPERATOR = ['+', '{', '[', '|', 'cat', '^'] # remove '*' and '?'
 
 def open_file(file):
-	opcode = {}
-	alphabet = []
-	last = []
-	operator = []
+	'''
+	Create the alphabet, leaf node etc for individuals
+	file: the file containing the specificity of the alphabet
+	'''
+
+	opcode = {} # Dictionnary containing all values for leaf nodes and all operators 
+	alphabet = [] # all values for leaf nodes except '.'
+	last = [] # all values for leaf nodes
+	operator = [] # all operators
 
 	with open(file,'r') as data:
 		for line in data:
@@ -47,7 +53,14 @@ def open_file(file):
 
 	return opcode, operator, last, alphabet
 
-OPCODE, OPERATOR, LAST, ALPHABET = open_file("data/translation/alphabet.csv")
+# alphabet_file = "data/translation/alphabet.csv"
+alphabet_file = f"data/Alphabet/{ALPHABET_FILE}.csv" # pptes physico-chimiques des AA
+
+# Create the alphabet and the available operators
+OPCODE, OPERATOR, LAST, ALPHABET = open_file(alphabet_file)
+MAX_IN_SQUARE = int(len(LAST)/2)
+
+
 
 ### Individual generation  ###
 def indi_grow(depth, min_braces, max_braces):
@@ -101,7 +114,7 @@ def indi_half(depth, min_braces, max_braces):
 		return indi_full(depth, min_braces, max_braces)
 
 
-
+# functions to build regex/individuals
 def build_regex(array):
 	'''
 	Transform the array in readable regex
@@ -109,6 +122,7 @@ def build_regex(array):
 
 	return the regex
 	'''
+
 	for i, node in enumerate(array):
 		if isinstance(node,list):
 			node = ''.join(node)
@@ -159,7 +173,6 @@ def explore_tree(tree, arr, index_node=0):
 def tree2regex(tree):
 	'''
 	Convert a regex tree shape by an array
-
 	tree: the tree shape of the regex
 
 	return the regex
@@ -176,7 +189,7 @@ def tree2regex(tree):
 	return regex
 
 
-
+# Function to test the construction of individual tree shape
 def test():
 	'''
 	To test the different methods
@@ -187,25 +200,29 @@ def test():
 	regex = tree2regex(g.tree)
 	print('Grow: ',regex)
 
-	f = Full(4,1,3)
-	f.build_full_tree()
-	print('Full: ',f.tree)
-	regex = tree2regex(f.tree)
-	print('Full: ',regex)
+	# f = Full(4,1,3)
+	# f.build_full_tree()
+	# print('Full: ',f.tree)
+	# regex = tree2regex(f.tree)
+	# print('Full: ',regex)
 
 
-#############
+			###########################################
+			###                                     ###
+			###             FULL INDI               ###
+			###                                     ###
+			###########################################
 
 class Full:
 
 	def __init__(self, depth, min_braces, max_braces):
-		self.depth = depth # Depth of the tree
-		self.max_nodes = (2**depth)-1
+		self.depth = depth 				 # Depth of the tree
+		self.max_nodes = (2**depth)-1	 # number of nodes
 		self.tree = [0] * self.max_nodes # General structure of the tree
 		self.min_braces = min_braces
 		self.max_braces = max_braces
-		self.leaves = [] # nodes of the last layer
-		self.mid_layer = [] # nodes of the penultimate layer
+		self.leaves = [] 				 # nodes of the last layer
+		self.mid_layer = [] 			 # nodes of the penultimate layer
 
 
 
@@ -222,11 +239,12 @@ class Full:
 		else:
 			# Nodes in last layer
 			for i in range(2**(self.depth-1)):
-				self.leaves.append(self.max_nodes - i)
+				self.leaves.append((self.max_nodes - i)-1)
 			
 			# Before last layer nodes
 			for i in range(2**(self.depth-2)):
-				self.mid_layer.append((self.max_nodes - 2**(self.depth-1)) - i)
+				self.mid_layer.append( ((self.max_nodes - 2**(self.depth-1)) - i)-1)
+
 		self.mid_layer = list(reversed(self.mid_layer))
 		self.leaves = list(reversed(self.leaves))
 
@@ -266,13 +284,13 @@ class Full:
 
 		if self.tree[i] == '[':
 			self.tree[i] = '[]'
-			self.tree[(i*2) + 1] = random.sample(ALPHABET, random.randint(1, len(ALPHABET)-1)) # child1=List
+			self.tree[(i*2) + 1] = random.sample(ALPHABET, random.randint(1, MAX_IN_SQUARE)) # child1=List
 			self.tree[(i*2) + 2] = None # self.add_extra_leaf(extra) # or None
 
 		elif self.tree[i] == '^':
 			self.tree[i] = '[^]'
 			self.tree[(i*2) + 1] = ['^']
-			self.tree[(i*2) + 1]+=random.sample(ALPHABET, random.randint(1, len(ALPHABET)-1))
+			self.tree[(i*2) + 1]+=random.sample(ALPHABET, random.randint(MAX_IN_SQUARE, len(ALPHABET)-1)) #random.randint(1, len(ALPHABET)-1)
 			self.tree[(i*2) + 2] = None # self.add_extra_leaf(extra) # or None
 
 		elif self.tree[i] == '+':
@@ -301,10 +319,9 @@ class Full:
 		'''
 		return random.choice(['cat', '|'])
 
-	def build_full_tree(self, extra=True):
+	def build_full_tree(self, extra=False):
 		'''
 		Build the tree shape with FULL method
-		
 		extra: activate or not the function to extend the regex
 
 		return the tree in list format
@@ -320,17 +337,23 @@ class Full:
 			else:
 				if self.tree[node] == 0: # Empty node
 					
-					if node+1 in self.leaves:      # last layer
+					if node in self.leaves:      # last layer
 						self.tree[node] = self.add_leaf(node)
 
-					elif node+1 in self.mid_layer: # before last layer
+					elif node in self.mid_layer: # before last layer
 						self.add_operator_arity1(node, extra)
+
 					else:
 						self.tree[node] = self.add_operator_arity2(node) # other layers
 
 		# print(self.tree)
 		return self.tree
 
+			###########################################
+			###                                     ###
+			###             GROW INDI               ###
+			###                                     ###
+			###########################################
 
 class Grow:
 
@@ -344,7 +367,7 @@ class Grow:
 		# print(self.depth)
 
 
-	def new_node(self, i):
+	def new_node(self, i, spe_case=False):
 		"""
 		Add an operator from the OPCODE list, in the current node i, that is never see by 
 		the algorithm
@@ -358,7 +381,21 @@ class Grow:
 			return random.choice(["cat","|"])
 		# Other node
 		else:
-			return random.choice(list(OPCODE.keys()))
+			# Avoid the conflict between {} and +
+			if spe_case:
+				tmp_list = []
+				for i in LAST:
+					tmp_list.append(i)
+
+				tmp_list.append('cat')
+				tmp_list.append('^')
+				tmp_list.append('[')
+
+				return random.choice(tmp_list)
+
+
+			else:
+				return random.choice(list(OPCODE.keys()))
 
 	def add_leaf(self, i):
 		"""
@@ -376,20 +413,21 @@ class Grow:
 		# CASE []
 		if operator == '[':	
 			# Return a k length (min=1) list of unique elements chosen from the ALPHABET. 
-			self.tree[(i*2) + 1] = random.sample(ALPHABET, random.randint(1, len(ALPHABET)-1))
+			a = random.randint(1, MAX_IN_SQUARE)
+			self.tree[(i*2) + 1] = random.sample(ALPHABET, a)
 			return "[]" # add current nodes
 		
 		# CASE [^]
 		elif operator == '^':
 			self.tree[(i*2) + 1] = ['^']
-			self.tree[(i*2) + 1]+=random.sample(ALPHABET, random.randint(1, len(ALPHABET)-1))
+			self.tree[(i*2) + 1]+=random.sample(ALPHABET, random.randint(MAX_IN_SQUARE, len(ALPHABET)-1))
 			return "[^]" # add current nodes
 
 		# CASE {}
 		elif operator == "{":
 			# Random toss between min and max values
 			x = random.randint(self.min_braces,self.max_braces) 
-			self.tree[(i*2) + 1] = 0 # add an element as child node
+			self.tree[(i*2) + 1] = 1 # add an element as child node
 
 			return "{" + str(x) + "}" # add current node
 
@@ -401,7 +439,7 @@ class Grow:
 		
 		# CASE + (Matches the preceding element one or more times)
 		elif operator == "+":
-			self.tree[(i*2) + 1] = 0 #random.choice(elements)  # add a new child node
+			self.tree[(i*2) + 1] = 1 #random.choice(elements)  # add a new child node
 
 			return "+" # add current node
 
@@ -465,12 +503,13 @@ class Grow:
 	
 	def build_grow_tree(self):
 		"""
-		Builds a tree representing an individual. The type of the tree is GROW
+		Builds a tree representing an individual. The construction method of the tree is GROW
 		The structure is as follows:
 		node 0 = root 
 		node i = parent
 		node (i*2)+1 = child_1 of i node
 		node (i*2)+2 = child_2 of i node
+
 		Ex: parent = node 2, child_1 = (2*2)+1=5, child_2 = (2*2)+2 = 6
 		Ex: [root, p1, p2, c1p1,c2p1, c1p2, c2p2 ]
 
@@ -488,8 +527,13 @@ class Grow:
 				# Modify the current i node with an Operator
 				self.tree[i] = self.new_node(i) 
 				# Modify the child nodes, depending of the value of the Operator
+
 				self.add_child(i, OPCODE[self.tree[i]]) 
 				# print(self.tree) # temporary tree
+			elif self.tree[i] == 1:
+				self.tree[i] = self.new_node(i, spe_case=True) 
+				self.add_child(i, OPCODE[self.tree[i]]) 
+
 
 			# Node with None value, means that parent node is a leaf (without children) 
 			elif self.tree[i] == None:
@@ -508,6 +552,6 @@ class Grow:
 
 		return self.tree
 
-	
+	# PROBLEME DANS LA CONSTRUCTION DES INDI GROW, AVEC LE + et LES {}
 	
 # test()

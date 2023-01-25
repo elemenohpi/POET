@@ -84,10 +84,6 @@ class Individual:
 			# any value within the given interval [minWeight, maxWeight] (default 0-10) is equally likely to be drawn by uniform
 			weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
 
-
-
-
-
 			# Add these many rules according to the number of characters (ruleSize) to create the pattern
 			# pattern = ""
 			# for j in range(R.randint(1, self.ruleSize)):
@@ -200,10 +196,15 @@ class Individual:
 					if self.rules[j].complexity < self.rules[j+1].complexity:
 						self.rules[j], self.rules[j + 1] = self.rules[j + 1], self.rules[j]
 				except TypeError:
-					print('[ERROR] indi.py l143')
+					print('[ERROR] indi.py l199')
 
 					print(self.rules[j].pattern)
 					print(self.rules[j+1].pattern)
+
+	def compute_fitness(self):
+		self.fitness = 0
+		for rule in self.rules:
+			self.fitness += rule.score
 
 	def compute_complexity(self):
 		'''
@@ -229,13 +230,27 @@ class Individual:
 
 			rule.complexity = nbr_leaf - nbr_or
 
+	def remove_double_rules(self):
+		list_rule = []
+		final = []
+
+		for rule in self.rules:
+
+			if rule.pattern not in list_rule:
+				list_rule.append(rule.pattern)
+				final.append(rule)
+				
+		self.rules = []
+
+		for rule in final:
+			self.rules.append(rule)
 
 
 	def print(self):
 		for kh, rule in enumerate(self.rules):
-			print(f"{kh}- {rule.pattern} - {rule.weight} - {rule.status} - {rule.complexity} - {rule.score}")
+			print(f"{kh+1}- {rule.pattern} - {rule.weight} - {rule.status} - {rule.complexity} - {round(rule.score,2)}")
 			# print(rule.tree_shape)
-
+		print("Fitness = ",self.fitness)
 
 # def main():
 # 	configparser = eletility.ConfigParser()

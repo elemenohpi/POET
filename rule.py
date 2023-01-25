@@ -11,6 +11,9 @@ class Rule:
 		self.complexity = 0
 		self.score = 0
 
+		self.db_motif = {}
+
+
 	def clear_pattern(self):
 		self.tree_shape = []
 		self.pattern = ''

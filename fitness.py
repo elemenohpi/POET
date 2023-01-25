@@ -16,6 +16,8 @@ from tqdm import tqdm
 import re
 import statistics
 
+import matplotlib.pyplot as plt
+
 
 
 class Fitness:
@@ -25,10 +27,10 @@ class Fitness:
 
         # Open training file
         try:
-            self.learn_file = pd.read_csv(config["learn_data"]) # data/learnall.csv by default
+            self.learn_file = pd.read_csv(f"data/Training/{config['learn_data']}.csv", sep=';') # data/learnall.csv by default
             print(f'[INFO] Training data from {config["learn_data"]} are correctly loaded')
         except AttributeError:
-            print("[ERROR] settings.learn_df is not set")
+            print("[ERROR] 'learn_data' in config.ini is not set")
             exit()
 
         self.mode = int(config["pattern_mode"])  # 0 is the summation mode and 1 is the multiplication mode
@@ -64,9 +66,72 @@ class Fitness:
         return seq_fitness_tuples, individuals_evaluations
 
 
+    def create_dico_predictions(self, rule, sequence):
+        try:
+            regex_rule = re.compile(rule.pattern) # la compilation des regex est redondante
+        except :
+            print('[ERROR] Compilation error: fitness.py 93', rule.pattern, rule.tree_shape)
+            exit()
+
+        # Search match in 'sequence'. Non-overlapping matches of the expression
+        object_find = re.finditer(regex_rule, sequence)
+
+        for match in object_find: # search motif len >=2 et <=6
+            motif = match.group()
 
 
-    def regex_eval(self, sequence, actualFitness, individual):
+            if len(motif) >= 2:
+                if motif not in rule.db_motif.keys():
+                    rule.db_motif[motif] = 1
+                else:
+                    rule.db_motif[motif] += 1
+
+
+    def motif_searcher(self, sequence, individual, dbmotif, training_fitness):
+        # On evalue chaque regles de l'individu
+        for rule in individual.rules: # List of rules of the indiivdual
+            self.create_dico_predictions(rule, sequence)
+
+
+
+
+
+
+
+
+
+    def eval_RMSE(self, sequence, actualFitness, individual):
+        measuredFitness = 0.0  # Fitness of individual i
+
+        for rule in individual.rules:
+
+            try:
+                regex_rule = re.compile(rule.pattern) # la compilation des regex est redondante
+            except :
+                print('[ERROR] Compilation error: fitness.py 93', rule.pattern, rule.tree_shape)
+                exit()
+
+            # Search match in 'sequence'. Non-overlapping matches of the expression
+            object_find = re.finditer(regex_rule, sequence)
+
+            counter = 0
+
+            for match in object_find: # search motif len >=2 et <=6
+                motif = match.group()
+                counter+=1 # il y a match
+
+            if counter != 0: # comme il y a match on change le status
+                if rule.status == 0:
+                    rule.status = 1
+
+                measuredFitness += rule.weight # on ajoute le poids a la valeur de fitness
+        
+        # Calculate the error after the estimation
+        error = abs(measuredFitness - float(actualFitness))
+        return error, measuredFitness
+
+
+    def eval_motif_searcher(self, sequence, actualFitness, individual):
         '''
         function to evaluate each regex on the different sequence from the dataset
 
@@ -82,53 +147,53 @@ class Fitness:
         # On evalue chaque regles de l'individu
         for rule in individual.rules: # List of rules of the indiivdual
             
-            nbr_match_motif = 0 # plus le nombre de match est grand, moins c'est bien
-            nbr_singleton = 0 # Match d'une seule lettre
-
-            singleton = False
-
             try:
                 regex_rule = re.compile(rule.pattern) # la compilation des regex est redondante
             except :
-                print('[ERROR] fitness.py 93', rule.pattern, rule.tree_shape)
+                print('[ERROR] Compilation error: fitness.py 93', rule.pattern, rule.tree_shape)
                 exit()
 
-            # print('Evaluation de la regex',i, '-', rule.pattern)
-
-            # cherche les matches dans la sequence cible - correspondances non chevauchantes de l'expression
+            # Search match in 'sequence'. Non-overlapping matches of the expression
             object_find = re.finditer(regex_rule, sequence)
-            full = 0
+
+            full = 0        # check if complete sequence is found
+            list_motif = [] # limit the redondance of motif
+            nbr_match_motif = 0
 
             for match in object_find: # search motif len >=2 et <=6
-
                 motif = match.group()
 
-                if len(motif) > 1 and len(motif) <= 6:
-                    # print(match.span(),'---', motif, '+',len(motif), 'points' )
-                    nbr_match_motif+=1
-                    full += len(match.group())
-                    rule.score += len(match.group())
+                # Find a good motif
+                if len(motif) > 1 and len(motif) <= 11:
+                    full += len(motif)
 
-                    if rule.status == 0:
-                        rule.status = 1
-                        individual.usedRulesCount += 1
+                    # remise a 0 si les jokers sont repetes .{X}
+                    if '.{' in str(regex_rule) or '.+' in str(regex_rule) or '(..){' in str(regex_rule):
+                        rule.score -= 10
+                    else:
+                        # motif not already found in the sequence
+                        if motif not in list_motif:
+                            nbr_match_motif+=1
+                            list_motif.append(motif)
+                            rule.score += (len(motif)*len(motif))
+                            # print(sequence, match.span(),'---', motif, '+',len(motif)*len(motif), 'points' )
 
-                # Size 1
+                            if rule.status == 0:
+                                rule.status = 1
+                                individual.usedRulesCount += 1
+
+                # Size 1 - Singleton
                 elif len(match.group()) == 1:
-                    nbr_singleton+=1
                     # print('taille 1',match,'---', match.span(),'---', match.group(), '-1 point')
-                    singleton = True
+                    rule.score -= 10
 
+            # match with all the sequence
             if full == len(sequence):
                 rule.score-=len(sequence)
 
             # Aucun match n'a ete trouvé (Penalty) - les individus avec + de rules seront penalise
-            # if nbr_match_motif == 0 and nbr_singleton==0:
-            #     rule.score -= 1 
-
-            if singleton:
-                # print('Singleton -1')
-                rule.score -= 1
+            if nbr_match_motif == 0:
+                rule.score -= 1 
 
             # print(f'SCORE de {rule.pattern} sur la sequence:',sequence, '=', rule.score)
             measuredFitness += rule.score
@@ -137,6 +202,62 @@ class Fitness:
 
 
     def eval(self, sequence, actualFitness, individual, returnPrediction=False):
+        pos = 0
+        measuredFitness = 0.0  # Fitness of individual i
+
+        while pos < len(sequence):
+            # Check every rule
+            for rule in individual.rules:
+                # Find the length of the rule
+                try:
+                    length_pattern = len(rule.pattern)
+                    # print(rule.pattern)
+
+                except:
+                    print('Empty rule')
+                    # happens in the case of empty rules.
+                    continue
+
+                # Continue if the rule length is more than the unchecked sequence length    
+                if length_pattern > (len(sequence) - pos) or length_pattern == 0:
+                    continue
+                
+
+                reverse_pattern = rule.pattern[::-1]
+                # Normal or Reverse
+                # print( rule.pattern, "vs", sequence[pos: (pos + length_pattern)])
+                if ((rule.pattern == sequence[pos: (pos + length_pattern)]) or reverse_pattern == sequence[
+                                                                                          pos: (pos + length_pattern)]):
+                    # rule is found. Update its status and the usedRulesCount to avoid further computation
+
+                    if rule.status == 0:
+                        rule.status = 1
+                        individual.usedRulesCount += 1
+
+                    # Check the multiplication/summation mode. We always use the summation mode tho. 
+                    if self.mode == 0:
+                        measuredFitness += rule.weight
+                    elif self.mode == 1:
+                        measuredFitness *= rule.weight
+                    else:
+                        raise "wrong mode"
+
+                    # If the rule is found, we don't wanna check any other "shorter" rules on the very same position. We wanna update the positioning and look for other rules. If no rule was found, the position updates anyway after the end of this loop so the difference is only the break command which happens only if the rule is found. This defenitely takes more processing power and considers overlapping rules but this is the way to go to consider all the possible cases. Also, note that this raises the issue of exponential slow-down when the number of rules in a table increase. Therefore, I assume we need some sort of bloat removal when the speed of the tool has decreased drastically.
+                    # break
+                    # print(rule.pattern, rule.weight)
+
+            # Update the position 
+            pos += 1
+        
+        # Calculate the error after the estimation
+        error = abs(measuredFitness - actualFitness)
+        # exit()
+        if returnPrediction is True:
+            return error, measuredFitness
+        return error
+
+
+    def eval_old(self, sequence, actualFitness, individual, returnPrediction=False):
         # This is the starting position of the sequence that we're looking at each time.
         pos = 0
         measuredFitness = 0.0  # Fitness of individual i
@@ -206,6 +327,7 @@ class Fitness:
         for rule in individual.rules:
             rule.status = 0
             rule.score = 0
+            rule.db_motif = {}
 
     def measure_dataset(self, individual):
         train_error = 0.0
@@ -221,7 +343,7 @@ class Fitness:
 
         return RMSE_train, 0
 
-    def measureTotal(self, individual):
+    def measureTotal(self, individual, dbmotif):
         """
         Mesure the fitness value for 1 individual
         """
@@ -266,7 +388,6 @@ class Fitness:
             RMSE_train = math.sqrt(train)
             RMSE_test = math.sqrt(test)
             return RMSE_train, RMSE_test
-
         elif self.config["fitness_alg"] == "correlation":
             predictions = []
             CEST_measurements = []
@@ -280,25 +401,145 @@ class Fitness:
             if math.isnan(pearsonr[0]):
                 return 1, 0
             return 1 - pearsonr[0] ** 2, 0
-
-        elif self.config["fitness_alg"] == "regex":
-            CEST_measurements = []
+        elif self.config["fitness_alg"] == "regex_motif":
 
             for i, row in self.learn_file.iterrows(): # training data
                 # Training sequences and fitness values
                 sequence, training_fitness = row[0], row[1] 
-
-                # Add training (True) fitness values (repetitive !)
-                CEST_measurements.append(training_fitness)  
                 
-                # print('sequence', i, '=', sequence, 'fitness=', training_fitness)
                 # on evalue chaque rule de l'individu pour avoir 1 score par rule 
-                # et donc un score totale ou moyen final
-                score = self.regex_eval(sequence, training_fitness, individual)
+                # evaluate the individual
+                score = self.eval_motif_searcher(sequence, training_fitness, individual)
             
+            # change the fitness of the individual
             individual.fitness = score
+        elif self.config["fitness_alg"] == "regex":
+            predictions = []
+            CEST_measurements = []
 
-        
+            for i, row in self.learn_file.iterrows():
+                sequence, actual_fitness = row[0], row[1]
+                print(sequence, actual_fitness)
+
+                CEST_measurements.append(actual_fitness)
+
+                _, prediction = self.eval(sequence, actual_fitness, individual, True)
+
+                predictions.append(prediction)
+            # pearsonr = stats.pearsonr(predictions, CEST_measurements)
+            # if math.isnan(pearsonr[0]):
+            #     return 1, 0
+            # return 1 - pearsonr[0] ** 2, 0
+
+        elif self.config["fitness_alg"] == "motif":
+            for i, row in self.learn_file.iterrows(): # training data
+                if ',' in row[0]:
+                    row = row[0].strip().split(',')
+                elif ';' in row:
+                    row = row[0].strip().split(';')
+                # Training sequences and fitness values
+                sequence = row[0]
+                for j, rule in enumerate(individual.rules): # List of rules of the indiivdual
+                    # Cree la db_motif prediction pour chaque regle/regex sur chaque seq d'entrainement
+                    self.create_dico_predictions(rule, sequence)
+                
+
+
+
+            for rule in individual.rules: # List of rules of the indiivdual
+                # print(rule.db_motif)
+                # print("REGEX:", rule.pattern)
+
+                for motif, occ in rule.db_motif.items():
+
+
+                        # !!! PRENDRE EN COMPTE LA LONGUEUR DU MOTIF,
+                        # PLUS IL EST LONG MIEUX C EST
+
+
+                    if motif in dbmotif.keys(): # la dbmotif du training set = tous les motifs du training set
+                        if dbmotif[motif][2] == 1: # cest > 12.5
+                            diff = abs(dbmotif[motif][0] - occ)
+                            # print("diff", diff)
+                            indice = round(dbmotif[motif][1],2)
+                            # print("indice", indice)
+                            x = diff / (indice/10)
+
+                            # # Alternative
+                            y = occ / dbmotif[motif][0]
+                            y = 1 - abs(math.log10(y))
+                            y = y * indice
+                            
+                            rule.score += y
+
+
+
+                        else: # bad cest
+                            diff = abs(dbmotif[motif][0] - occ)
+                            # print("diff", diff)
+                            indice = round(dbmotif[motif][1],2)
+                            # print("indice", indice)
+                            x = diff / (indice/10)
+
+                            # Alternative
+                            y = occ / dbmotif[motif][0]
+                            y = 1 - abs(math.log10(y))
+                            y = y * indice
+
+                            # if x <= 0.0:
+                                # rule.score -= indice
+                            # else:
+                                # rule.score -= (1 - math.log(x))
+                            rule.score -= y*3
+
+                        
+
+
+
+                        # print("x", x)
+
+                        # print(rule.pattern,motif,occ, dbmotif[motif][0], round(dbmotif[motif][1],2))
+                        # print(x)
+
+
+                            # print(diff, indice, x, (1-math.log(x)) )
+                        # print(abs(occ-dbmotif[motif][0]))
+                        # rule.score += abs(occ-dbmotif[motif][0]) / round(dbmotif[motif][1],2)
+                    # else:
+                    #     rule.score -= 0.5
+
+                # La somme des score des regex = fitness total de l'individu
+                individual.fitness += rule.score
+        elif self.config["fitness_alg"] == "RMSE2":
+            predictions = []
+            CEST_measurements = []
+
+            for i, row in self.learn_file.iterrows():
+                if ',' in row[0]:
+                    row = row[0].strip().split(',')
+                elif ';' in row:
+                    row = row[0].strip().split(';')
+
+                sequence = row[0]
+                actual_fitness = float(row[1])
+
+                # Add all CEST value
+                CEST_measurements.append(actual_fitness)
+
+                # evaluate individual on the sequence
+                error, measuredFitness = self.eval_RMSE(sequence, actual_fitness, individual)
+
+                predictions.append(measuredFitness)
+
+            pearsonr = stats.pearsonr(predictions, CEST_measurements)
+            if math.isnan(pearsonr[0]):
+                individual.fitness = 1.0
+
+            # return 1 - pearsonr[0] ** 2, 0
+
+            individual.fitness = round(1 - pearsonr[0] ** 2,3)
+
+
 
 
 
@@ -334,3 +575,32 @@ class Fitness:
                     break
             pos += 1
         return fitness
+
+
+def plot_fitness():
+    CEST_value = [50,40,30,20,12.5,10,5,1,0] #9
+    difference = [10,9,8,7,6,5,4,3,2,1] #11 
+   
+    for diff in difference:
+        print('--- DIFF = ',diff, '---')
+        l = []
+        for cest in CEST_value:
+
+            x = 1-math.log10(diff)
+            print(diff, x, math.log10(diff)) # log neperien
+            x = x * cest
+            print(cest, x)
+            l.append(x)
+
+        plt.plot(CEST_value, l, label=str(diff))
+    plt.legend()
+    plt.xlabel('CEST value')
+    plt.ylabel('Score')
+    plt.grid()
+    plt.show()
+
+# plot_fitness()
+
+
+
+                            
