@@ -6,6 +6,7 @@ Protein Optimization Engineering Tool Minimal Instructions for the Python Versio
 2- Install the requirements pandas and scipy
 
 pip install pandas
+
 pip install scipy 
 
 or add them to your venv via your IDE (Recommended)
@@ -17,6 +18,5 @@ or add them to your venv via your IDE (Recommended)
 5- Set the best model to be the predictor
 
 6- Use -predict option of poet.py to predict new protein sequences
-
 
 Note: There's a -hpcc option for running the experiments on HPCC. You might want to use the -c option to compare multiple models.
