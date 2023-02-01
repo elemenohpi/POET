@@ -1,4 +1,6 @@
 import os
+import random
+
 import fitness as F
 import random as R
 import individual as I
@@ -23,7 +25,7 @@ class Predictor:
         self.iterations = iterations
         self.pop = []
         self.output = []
-        self.popSize = 10
+        self.popSize = 10000
         codes = pd.read_csv("data/translation/amino_to_amino.csv")
         codes = codes["code"].tolist()
         self.codes = codes
@@ -53,6 +55,7 @@ class Predictor:
         pass
 
     def predict(self):
+        random.seed(int(self.config["seed"]))
         objF = F.Fitness(self.config)
         files = [f for f in os.listdir(self.model_path) if os.path.isfile(os.path.join(self.model_path, f))]
         ensemble = []
@@ -66,16 +69,18 @@ class Predictor:
 
         self.populate(ensemble)
 
-        self.sort()
+        # self.sort()
 
         learn_data = pd.read_csv(self.config["learn_data"])
         data_set_rules = learn_data["sequence"].tolist()
 
-        for i in range(self.count):
-            print(repr(i + 1) + ":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness, 2))
+        # for i in range(self.count):
+        #     print(repr(i + 1) + ":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness, 2))
 
-        for _ in range(self.iterations):
-            self.sort()
+        for iter_index in range(1, self.iterations+1):
+            if iter_index % 1 == 0:
+                print("Iteration", iter_index, "complete")
+            # self.sort()
             # for i in range(self.count):
             # 	print(repr(i+1)+":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness,2))
 
@@ -86,13 +91,23 @@ class Predictor:
                 randomsite = R.randint(0, self.size - 1)
                 # print("randomsite", randomsite)
                 rand = R.randint(0, len(self.codes) - 1)
-                newseq = copy.copy(seq)
+                newseq = copy.deepcopy(seq)
                 # print("seq", seq.pattern)
                 # print(newseq.pattern)
                 # exit()
                 newamino = self.codes[rand]
                 # print("newamino", newamino)
-                newseq.pattern = newseq.pattern[:randomsite] + newamino + newseq.pattern[randomsite + 1:]
+                # try:
+                # newseq.pattern[randomsite] = newamino
+                chars = list(newseq.pattern)
+                chars[randomsite] = newamino
+                newseq.pattern = "".join(chars)
+                # except Exception(e):
+                #     print(e)
+                #     print("newseq pattern", newseq.pattern)
+                #     print("newamino", newamino)
+                #     print("randomsite", randomsite)
+                #     exit()
                 # print(seq.pattern)
                 # print(newseq.pattern)
                 if newseq.pattern in data_set_rules:
@@ -109,14 +124,28 @@ class Predictor:
 
                 # print("tempF", tempF)
                 if fitness > seq.fitness:
+                    # print("old seq", seq.pattern)
+                    # print("new seq", newseq.pattern)
+                    # print("fitness", fitness)
+                    # print("old fitness", seq.fitness)
                     newseq.fitness = fitness
                     # print(seq.pattern + " -> " + newseq.pattern + " | fitness: " + repr(seq.fitness) + " -> " + repr(newseq.fitness) )
                     self.pop[myi] = newseq
-                    improvement = True
+                    # print(self.pop[myi].fitness)
+                    # exit()
+                    # improvement = True
 
-            if improvement:
-                for i in range(self.count):
-                    print(repr(i + 1) + ":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness, 2))
+            # if improvement:
+            #     print(seq.fitness)
+            #     seq = newseq
+            #     print(seq.fitness)
+            #     print(self.pop[myi].fitness, "should be updated")
+            #     exit()
+                # for i in range(self.count):
+                #     print(repr(i + 1) + ":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness, 2))
+        self.sort()
+        for i in range(10):
+            print(self.pop[i].pattern, self.pop[i].fitness)
 
     def sort_rules(self, rules):
         sortedR = []
@@ -144,7 +173,7 @@ class Predictor:
             pattern = ""
             if self.size <= 0:
                 self.size = R.randint(8, 12)
-            for j in range(self.size - 1):
+            for j in range(self.size):
                 rand = R.randint(0, len(self.codes) - 1)
                 pattern += self.codes[rand]
             if self.hydrophobic(pattern):
@@ -158,6 +187,10 @@ class Predictor:
 
             sequence = Sequence(pattern, fitness)
             self.pop.append(sequence)
+        # for seq in self.pop:
+        #     if len(seq.pattern) != self.size:
+        #         print(len(seq.pattern), seq.pattern)
+        # exit()
 
     def hydrophobic(self, pattern):
         temp = 0

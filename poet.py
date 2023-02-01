@@ -104,14 +104,23 @@ def manage_input(args):
         exit()
 
     if args.predict:
-        print("Predicting proteins:\n================================".format(args.predict))
-        count = int(input("Enter prediction count: "))
-        seq_size = int(input("Enter protein sequences size: "))
-        iterations = int(input("Enter number of evolutionary iterations (Larger values results in more confident and "
-                               "yet similar predictions.\n Lower values makes room for novelty but the prediction might"
-                               " not be as accurate): "))
-        model = input("Enter the path to the predictor model(s): ")
-        predictor = P.Predictor(count, seq_size + 1, iterations, config, model)
+        print("Predicting proteins:\nPopulation pool is set to be 10000\n================================")
+        # count = int(input("Enter prediction count: "))
+        # seq_size = int(input("Enter protein sequences size: "))
+        # iterations = int(input("Enter number of evolutionary iterations (Larger values results in more confident and "
+        #                        "yet similar predictions.\n Lower values makes room for novelty but the prediction might"
+        #                        " not be as accurate): "))
+        # model = input("Enter the path to the predictor model(s) directory: ")
+        # config = input("Enter the path to the config file used to run the experiment: ")
+
+        count = 10
+        seq_size = 12
+        iterations = 0
+        config = "output/Predictor/config.ini"
+        model = "output/Predictor"
+
+        config = configparser.read(config)
+        predictor = P.Predictor(count, seq_size, iterations, config, model)
         predictor.predict()
         exit()
 
