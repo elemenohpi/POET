@@ -12,6 +12,7 @@ class Rule:
 		self.score = 0
 
 		self.db_motif = {}
+		self.nb_match = 0
 
 
 	def clear_pattern(self):

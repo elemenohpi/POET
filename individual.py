@@ -9,6 +9,15 @@ import eletility
 import regex
 import re
 
+from Bio import pairwise2
+from Bio.pairwise2 import format_alignment
+from Bio.Seq import Seq
+
+import copy
+import time
+
+from fuzzywuzzy import fuzz
+
 
 
 class Individual:
@@ -28,6 +37,7 @@ class Individual:
 		self.depth_tree = int(config["max_depth_tree"])
 		self.min_braces = int(config["min_braces"])
 		self.max_braces = int(config["max_braces"])
+		self.max_identity = float(config['identity'])
 
 
 
@@ -74,27 +84,15 @@ class Individual:
 				return False
 
 
-	def init_pattern(self, init_method):
-		# Load alphabet
-		codes = pd.read_csv("data/translation/amino_to_amino.csv")
-		codes = codes["code"].tolist()
+	def init_regex_pattern(self, init_method):
 
-		# Add random number of rules between 1 and maxRuleCount / 3
-		for i in range(R.randint(1, int(self.maxRuleCount / 3))):
-			# any value within the given interval [minWeight, maxWeight] (default 0-10) is equally likely to be drawn by uniform
+		# Add random number of rules between 1 and maxRuleCount / 5
+		for i in range(R.randint(1, int(self.maxRuleCount/4) )):
+
+			# Create a ramdom weight (default 0-10)
 			weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
 
-			# Add these many rules according to the number of characters (ruleSize) to create the pattern
-			# pattern = ""
-			# for j in range(R.randint(1, self.ruleSize)):
-			# 	# Rule size is calculated randomly, and now we need to select a random combination of codes with a specified size
-			# 	randomchar = codes[R.randint(0, (len(codes) - 1))] # draw a random char
-			# 	pattern += randomchar
-
-
-
-
-			# Create a new RE pattern
+			# Create a new regex pattern according to a tree construction method
 			if init_method == 'half':
 				pattern_re, tree = regex.indi_half(self.depth_tree, self.min_braces, self.max_braces)
 			
@@ -105,28 +103,22 @@ class Individual:
 			elif init_method == 'full':
 				pattern_re, tree = regex.indi_full(self.depth_tree, self.min_braces, self.max_braces)
 			else:
-				print('Initialisation method Error, choose between: grow, full or half')
+				print('[ERROR] Initialization method Error, choose between: grow, full or half in config.ini file')
 				exit()
 
-
-
-
-
-			# rule = Rule.Rule(pattern, weight, 0) # Create a Rule instance
-			# self.rules.append(rule)
-
-
+			# checkpoint 1
 			if self.check_pattern(pattern_re):
 				rule = Rule.Rule(pattern_re, weight, 0, tree) # Create a Rule instance
 				
-				# checkpoint
+				# checkpoint 2
 				if rule.tree_shape[0] != 'cat' and rule.tree_shape[0] != '|':
 					print('[ERROR] Root is incorrect:', rule.tree_shape)
 					exit()
 
+				# Add the new regex to the list of rules
 				self.rules.append(rule)
 
-		self.bubbleSort() # Sort the array according to the size of motifs
+		self.complexitySort() # Sort the array according to the complexity of regex
 
 
 	def init_formula(self):
@@ -181,8 +173,8 @@ class Individual:
 	# 			counter +=1
 	# 	return counter
 
-	def bubbleSort(self):
-		self.compute_complexity()
+	def complexitySort(self):
+		# self.compute_complexity()
 		# Sort the array Rules. The first element has the highest size and the last the smallest size
 		n = len(self.rules)
 		# Traverse through all array elements
@@ -193,10 +185,10 @@ class Individual:
 				# Swap if the element found is greater
 				# than the next element
 				try:
-					if self.rules[j].complexity < self.rules[j+1].complexity:
+					if self.rules[j].score < self.rules[j+1].score:
 						self.rules[j], self.rules[j + 1] = self.rules[j + 1], self.rules[j]
 				except TypeError:
-					print('[ERROR] indi.py l199')
+					print('[ERROR] indi.py l176')
 
 					print(self.rules[j].pattern)
 					print(self.rules[j+1].pattern)
@@ -230,27 +222,153 @@ class Individual:
 
 			rule.complexity = nbr_leaf - nbr_or
 
-	def remove_double_rules(self):
-		list_rule = []
+
+
+
+	def remove_double_rules_old(self):
+		set_pattern = set()
 		final = []
 
+		# Remove duplicates
 		for rule in self.rules:
-
-			if rule.pattern not in list_rule:
-				list_rule.append(rule.pattern)
+			if rule.pattern not in set_pattern:
+				set_pattern.add(rule.pattern)
 				final.append(rule)
-				
-		self.rules = []
 
-		for rule in final:
-			self.rules.append(rule)
+		self.rules.clear()  # Reset the list of rules
+		self.rules = copy.copy(final) # replaces the list of rules by a list without duplicates
+
+		afac=set()
+
+		for i, rule1 in enumerate(self.rules):
+			for j, rule2 in enumerate(self.rules):
+				if i == j:
+					pass
+				else:
+
+					# print('R1', rule1.pattern, rule1.weight, rule1.score)
+					# print('R2',rule2.pattern, rule2.weight, rule2.score)
+
+					if rule1.weight == rule2.weight:
+					# try:
+						ratio = fuzz.ratio(rule1.pattern, rule2.pattern)
+		
+						if ratio >= self.max_identity:
+							# to_remove = j + i + 1 if self.rules[j + i + 1].score < rule.score else i
+							# self.rules.remove(rule2.pattern)
+							# self.rules.pop(j)
+
+							sup_tuple = (i, j)
+							sorted_ = tuple(sorted(sup_tuple))
+							afac.add(sorted_)
+			
+		x = []
+		for t in afac:
+			# tt.remove(tt[t[1]])
+			if self.rules[t[0]].score >= self.rules[t[1]].score:
+				x.append(self.rules[t[1]])
+			else:
+				x.append(self.rules[t[0]])
+
+		for i in x:
+			self.rules.remove(i)
+
+
+
+
+
+
+
+
+
+	def remove_double_rules_old_old(self):
+		'''
+		Remove duplicate regex and regex with more than 80% identity.
+		'''
+
+		set_pattern = []
+		final = []
+
+		nbr_ali = 0
+
+		# Remove duplicates
+		for rule in self.rules:
+			if rule.pattern not in set_pattern:
+				set_pattern.append(rule.pattern)
+				final.append(rule)
+
+		self.rules = [] # Reset the list of rules
+		self.rules = copy.copy(final) # replaces the list of rules by a list without duplicates
+
+		# supprime les regex.pattern qui sont trop similaire
+		# on check le % d identite entre les regles qui ont le meme poids
+		# car se sont probablement des regex trop proche du a une mutation
+		for i, rule in enumerate(self.rules):
+			for j, rule2 in enumerate(self.rules[i+1:]):
+			# for j, rule2 in enumerate([r for r in self.rules[i+1:] if r.weight == rule.weight]):
+
+				# if i == j:
+				# 	pass
+				# else:
+				# try:
+				# same weight ~ID
+				if rule.weight == rule2.weight:
+					p1 = Seq(rule.pattern)
+					p2 = Seq(rule2.pattern)
+
+					# alignement of the 2 patterns
+					alignments = pairwise2.align.globalxx(p1, p2)
+					best_alignment = alignments[0]
+					identity = (best_alignment[2] / len(best_alignment[0])) * 100
+					nbr_ali+=1
+
+					# print('ALIGNEMENT prend', t3, 's')
+
+					if identity >= self.max_identity: # defaut = 49.0
+						# remove the rule with the lowest score
+						to_remove = j + i + 1 if self.rules[j + i + 1].score < rule.score else i
+						self.rules.pop(to_remove)
+						
+				else:
+					pass
+
+
+					# if self.rules[i].weight == self.rules[j].weight:
+						# p1 = self.rules[i].pattern
+						# p2 = self.rules[j].pattern
+	
+						# # alignement of the 2 patterns
+						# alignments = pairwise2.align.globalxx(p1, p2)
+						# best_alignment = alignments[0]
+						# identity = (best_alignment[2] / len(best_alignment[0])) * 100
+						
+						# if identity >= self.max_identity: # defaut = 51.0
+						# 	# remove the rule with the lowest score
+						# 	self.rules.pop(j if self.rules[j].score < self.rules[i].score else i)
+
+						# 	break
+				# except:
+				# 	pass
+
+
+		# print('NBR ALIGNEMENT prend', nbr_ali)
+
+
+
+			
+
+
+
+	
+
+
 
 
 	def print(self):
 		for kh, rule in enumerate(self.rules):
 			print(f"{kh+1}- {rule.pattern} - {rule.weight} - {rule.status} - {rule.complexity} - {round(rule.score,2)}")
 			# print(rule.tree_shape)
-		print("Fitness = ",self.fitness)
+		print("Fitness = ", round(self.fitness,3), '\n')
 
 # def main():
 # 	configparser = eletility.ConfigParser()

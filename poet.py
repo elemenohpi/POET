@@ -16,6 +16,7 @@ import archivist as archivist
 # import pandas as pd
 import eletility
 from datetime import date
+import time
 
 
 
@@ -58,6 +59,7 @@ def add_arguments_to_parser(parser):
 
 def manage_input(args):
     configparser = eletility.ConfigParser()
+
     if args.config:
         config = configparser.read(args.config)
     else:
@@ -122,11 +124,8 @@ def manage_input(args):
 
 
 def main():
-    print("\n\n######################################################\n")
-    print("POET V2.0b \n")
-    print("######################################################\n")
-
-    print("Configuring the application...\n")
+    call_header()
+    print("[INFO] Configuring the application...\n")
 
     # Argument descriptions
     parser = argparse.ArgumentParser(
@@ -144,14 +143,36 @@ def main():
     # Setups the architecture of the project ToDo:: Might be a good idea to improve this or remove it altogether
     arch.setup()
 
-    pop = population.Population(config)
-    # for i in pop.pop: # display all individuals
-    #     i.print()
-    # exit()
+
+
+    ###########################################
+    ###                                     ###
+    ###             EVOLUTION               ###
+    ###                                     ###
+    ###########################################
+
+
+    # Initialization step (create a random population)
+    start_t = time.time()
+    psize=int(config["population_size"])
+    pmet=str(config["init_pop_met"]).upper()
+    print(f"[INFO] Initializing a population with size of {psize} with the method {pmet}")
+
+    pop = population.Population(config, empty=False)
+    stop_t = time.time()
+
+    t = round(stop_t - start_t, 3)
+    print(f"[INFO] Creation of the population in {t}s\n")
+
+
+    # describe_pop(pop)
     
     # Core of the evolution algorithm
     opt = optimizer.Optimizer(config, pop)
     opt.optimize() # Optimize the population
+
+
+
 
 
     # elif args.pop == None and args.seq == None and args.model == None:
@@ -353,6 +374,19 @@ def hpcc():
         file.close()
         call(["sbatch", os.path.join(subs_directory, "{}_{}.sb".format(title, i))])
 
+def call_header():
+    print("\n#------------------------------------------------------#\n")
+    print('   ____   ___  _____ _____  __     ______    _ _      ')   
+    print('  |  _ \ / _ \| ____|_   _| \ \   / /___ \  / | |__      ')
+    print('  | |_) | | | |  _|   | |    \ \ / /  __) | | | \'_ \     ')
+    print('  |  __/| |_| | |___  | |     \ V /  / __/ _| | |_) |    ')
+    print('  |_|    \___/|_____| |_|      \_/  |_____(_)_|_.__/     ')
+    print('\n')
+    print("#------------------------------------------------------#\n")
 
+def describe_pop(pop):
+    for i in pop.pop: # display all individuals
+        i.print()
+                   
 if __name__ == "__main__":
     main()

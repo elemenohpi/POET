@@ -36,9 +36,19 @@ class Archivist:
 		file.write("{}\n".format(string))
 		file.close()
 
-	def saveModel(self, df):
+	def saveModel(self, df, verbose):
+		'''
+		Save the best model
+		df: Dataframe containing the values of the model, classicaly - columns=['weight','pattern', 'score']
+		verbose: Boolean 
+		'''
+
 		path = self.config["output_model"]
 		df.to_csv(path)
+
+		if verbose == 'True':
+			print(f'[INFO] Best model saved in {path}')
+
 
 	def setup(self, archive=False):
 		# Ensure the appropriate directories exist. Remove any existing log file and archive them using appropriate time/date

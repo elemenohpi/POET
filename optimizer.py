@@ -20,8 +20,15 @@ import numpy as np
 
 import motif_bank
 from statistics import mean
+import evaluation as Evaluation
 
+import seaborn as sns
+import scipy as sp
 
+import multiprocessing
+
+from Bio import pairwise2
+from Bio.Seq import Seq
 
 
 
@@ -30,108 +37,241 @@ from statistics import mean
 class Optimizer:
 
 	def __init__(self, config, population):
-		self.config = config
-		self.P = population
-		self.runs = int(config["runs"]) # number of generations
-		self.tournamentSize = int(config["tournament_size"])
-		self.logInterval = int(config["pop_log_interval"])
-		self.crossRate = float(config["crossover_unused_selection_chance"])
-		self.ruleSize = int(config["maximum_rule_size"])
-		self.ruleCount = int(config["maximum_rule_count"])
-		self.minWeight = float(config["rule_weight_min"])
-		self.maxWeight = float(config["rule_weight_max"])
-		self.output_evo = config["output_evo"]
-		self.output_model = config["output_model"]
-		self.mAR = float(config["mut_add_rule"])
-		self.mRR = float(config["mut_remove_rule"])
-		self.mCW = float(config["mut_change_weight"])
-		self.mATP = float(config["mut_add_to_pattern"])
-		self.mRFP = float(config["mut_remove_from_pattern"])
-		self.mCWmin = 0
-		self.mCWmax = 1
-		codes = pd.read_csv("data/translation/amino_to_amino.csv")
-		self.codes = codes["code"].tolist()
+		self.config = config 									# Config parameters
+		self.P = population 									# the initial population
+		self.runs = int(config["runs"]) 						# number of generations
+		self.tournamentSize = int(config["tournament_size"])	# Size of the tournament during selection step
+		self.reduction_tournament_size = int(config["red_tournament_size"]) #  Size of the tournament during reduction step
+		# self.logInterval = int(config["pop_log_interval"])
+		# self.crossRate = float(config["crossover_unused_selection_chance"])
+		# self.ruleSize = int(config["maximum_rule_size"])
+		self.ruleCount = int(config["maximum_rule_count"])		# Max number of regex/rules
+		self.minWeight = float(config["rule_weight_min"])		# a remplacer par un genre d'identifiant
+		self.maxWeight = float(config["rule_weight_max"])		# a remplacer par un genre d'identifiant
+		# self.output_evo = config["output_evo"]
+		# self.output_model = config["output_model"]
 
+		# Mutation rates
+		self.mAR = float(config["mut_add_rule"]) 				# Add Rule
+		self.mRR = float(config["mut_remove_rule"]) 			# Remove Rule
+		self.mReR = float(config["mut_replace_rule"]) 			# Replace Rule
+		self.mCW = float(config["mut_change_weight"]) 			# Change Weight       # INUTILE !!!!
+		self.mReS = float(config["mut_replace_subtree"]) 		# Replace Subtree
+		self.mRFP = float(config["mut_remove_from_pattern"]) 	# Remove subtree
+		self.mRN = float(config["mut_point"]) 					# Replace Node
+		self.mAA = float(config["mut_add_aa"]) 					# Add Alphabet
 
-		self.depth_tree = int(config["max_depth_tree"])
-		self.min_braces = int(config["min_braces"])
-		self.max_braces = int(config["max_braces"])
-		self.maxnodes = (2**self.depth_tree)-1 
-		self.dict_layer = {}
-		self.last_layer = self.which_layer()
-		self.mPP = float(config["mut_ponctual_point"])
-		self.mAA = float(config["mut_add_aa"])
+		self.mCWmin = 0				# AFAC
+		self.mCWmax = 1				# AFAC
+		# codes = pd.read_csv("data/translation/amino_to_amino.csv")
+		# self.codes = codes["code"].tolist()
 
+		# Regex Parameters
+		self.seed = int(config["seed"])							# Seed value
+		self.depth_tree = int(config["max_depth_tree"])			# Max depth of tree shape
+		self.min_braces = int(config["min_braces"])				# Min value in {}
+		self.max_braces = int(config["max_braces"])				# Max value in {}
+		self.verbose = config["verbose"] 						# Display some information
+		self.pop_size = int(config["population_size"])			# Size of the initial population
+		self.init_method = str(config["init_pop_met"])			# Individual construction method
+		self.alphabet = config["learn_data"]					# Name of the alphabet used for the encoded data
+		self.MAX_motif_size = int(config["max_motif_size_db"])	# Max size of motif identified by regex
+		self.MIN_motif_size = int(config["min_motif_size_db"])	# Min size of motif identified by regex
+		self.db_strat = config["db_motif"]						# Construction method of the motif database
+		self.insertion_mtd = config["insertion_pop"]			# Method for generating the n+1 population
+		self.reduction_method = config['reduction_method']		# Algorithm used during the reduction step
 
-		# behaviour metrics NS
+		self.maxnodes = (2**self.depth_tree)-1 					# Max number of nodes in the tree 
+		self.dict_layer = {}									# Dictionnary with key= #layer and value=nodes in the layer
+		self.last_layer = self.which_layer()					# Num of the last layer of the tree 
+		self.stop_fitness = []									# Checkpoint to stop evolution
 
-
-		self.list_mutation = []
-		self.verbose = config["verbose"]
-		self.pop_size = int(config["population_size"])
-		self.init_method = str(config["init_pop_met"])
-		self.alphabet = config["learn_data"]
-		self.MAX_motif_size = int(config["max_motif_size_db"])
-		self.MIN_motif_size = int(config["min_motif_size_db"])
-
-
-		# Store value of best fitness to create graph
-		self.best_fitness_list = []
-		self.avg_fitness_list = []
-
-		self.best_rule_count = []
-		self.avg_rule_count = []
-		self.deviation_rule_count = []
-		self.deviation_fitness_count = []
-
-		self.counter_add_rule = 0
-		self.counter_remove_rule = 0
-		self.counter_replace_tree = 0
-		self.nbr_add_rule = []
-		self.nbr_remove_rule = []
-		self.nbr_replace_tree = []
-
-		self.mutation_count = 0
-		self.mRR_count = 0
-		self.db_strat = config["db_motif"]
+		# Mutation counters
+		self.f_add_rule = []									#List with number of mutation Add Rule per run
+		self.f_remove_rule = []									#List with number of mutation Remove Rule per run
+		self.f_replace_rule = []								#List with number of mutation Replace Rule per run
+		self.f_replace_subtree = []								#List with number of mutation Replace Subtree per run
+		self.f_add_aa = []										#List with number of mutation Add Alphabet element per run
+		self.f_replace_node = []								#List with number of mutation Replace Node per run
+		self.f_remove_subtree = []								#List with number of mutation Remove Subtree per run
 
 
 
-	def save_best_model(self, arch, bestIndividual):
-		# Save the best model
+		# self.training_db_motif = {} # used only with the fitness function 'motif' !!!! enlever et mis dans fitness
+
+
+
+
+	# def build_db_motif(self):
+	# 	for i in range (self.MIN_motif_size, self.MAX_motif_size+1):
+	# 		# Strategies
+	# 		if self.db_strat == 'std': 	# Best CEST value
+	# 			self.training_db_motif = motif_bank.standard_motif_bank(i, self.alphabet)
+	# 		if self.db_strat == 'avg':	# Average CEST value 
+	# 			self.training_db_motif = motif_bank.average_motif_bank(i, self.alphabet)
+	# 		if self.db_strat == 'occ':	# Number of motif in each class define the classe
+	# 			self.training_db_motif = motif_bank.occ_motif_bank(i, self.alphabet)
+
+	
+
+	def save_best_model(self, archive_instance, bestIndividual, verbose):
+		''' Save the best model (each regex/rule)
+
+		archive_instance: instance of Archivist
+		bestIndividual: best individual/model to save
+		verbose: Boolean
+
+		'''
 		data = []
-		for rule in bestIndividual.rules:
-			data.append([rule.pattern, rule.weight, rule.status])
-		df = pd.DataFrame(data, columns=['pattern', 'weight', 'status'])
-		arch.saveModel(df)
+
+		for regex in bestIndividual.rules:
+			data.append([regex.weight, regex.pattern, regex.score])
+		
+		df = pd.DataFrame(data, columns=['weight','pattern', 'score'])
+		archive_instance.saveModel(df, verbose)
+
+	def stop_condition(self, stop=5):
+		'''
+		Interrupt the evolution process if the fitness of the best individual doesn't change anymore during {stop} runs.
+		stop:  Number of runs before the process stops
+
+		return a boolean, if True the process stops
+		'''
+
+		if len(self.stop_fitness) < stop:
+			return False
+
+		for i in range(len(self.stop_fitness) - stop, len(self.stop_fitness)):
+			if self.stop_fitness[i] != self.stop_fitness[i-1]:
+				return False
+		return True
+
+
+
+
+
+
+
+
+
+
+	def remove_double_rules(self, individual):
+		'''
+		Remove duplicate regex and regex with more than 80% identity.
+		'''
+
+		set_pattern = []
+		final = []
+
+		nbr_ali = 0
+
+		# Remove duplicates
+		for rule in individual.rules:
+			if rule.pattern not in set_pattern:
+				set_pattern.append(rule.pattern)
+				final.append(rule)
+
+		individual.rules = [] # Reset the list of rules
+		individual.rules = copy.copy(final) # replaces the list of rules by a list without duplicates
+
+		# supprime les regex.pattern qui sont trop similaire
+		# on check le % d identite entre les regles qui ont le meme poids
+		# car se sont probablement des regex trop proche du a une mutation
+		for i, rule in enumerate(individual.rules):
+			for j, rule2 in enumerate(individual.rules[i+1:]):
+			# for j, rule2 in enumerate([r for r in self.rules[i+1:] if r.weight == rule.weight]):
+
+				# if i == j:
+				# 	pass
+				# else:
+				# try:
+				# same weight ~ID
+				if rule.weight == rule2.weight:
+					p1 = Seq(rule.pattern)
+					p2 = Seq(rule2.pattern)
+
+					# alignement of the 2 patterns
+					alignments = pairwise2.align.globalxx(p1, p2)
+					best_alignment = alignments[0]
+					identity = (best_alignment[2] / len(best_alignment[0])) * 100
+					nbr_ali+=1
+
+					# print('ALIGNEMENT prend', t3, 's')
+
+					if identity >= 49.0: # defaut = 49.0
+						# remove the rule with the lowest score
+						to_remove = j + i + 1 if individual.rules[j + i + 1].score < rule.score else i
+						individual.rules.pop(to_remove)
+						break
+				else:
+					pass
+
+
+					# if self.rules[i].weight == self.rules[j].weight:
+						# p1 = self.rules[i].pattern
+						# p2 = self.rules[j].pattern
+	
+						# # alignement of the 2 patterns
+						# alignments = pairwise2.align.globalxx(p1, p2)
+						# best_alignment = alignments[0]
+						# identity = (best_alignment[2] / len(best_alignment[0])) * 100
+						
+						# if identity >= self.max_identity: # defaut = 51.0
+						# 	# remove the rule with the lowest score
+						# 	self.rules.pop(j if self.rules[j].score < self.rules[i].score else i)
+
+						# 	break
+				# except:
+				# 	pass
+
+
+		# print('NBR ALIGNEMENT prend', nbr_ali)
+		return individual
+
+
+
+
+
+
+
+
+
+
+
+
 
 	def optimize(self):
-		# We need an instance of the Fitness and Archivist classes for later usage
-		fitness = F.Fitness(self.config)
-		arch = Archivist.Archivist(self.config)
-		dbmotif = {}
-
-		# ToDo:: raise("Add dynamic mutation rates to escape from premature convergence.
-		# \nAdd Remove duplicate rules
-		#  to make space for the new rules without changing the fitness")
-
-		log_string = "best fitness, best test, best rule count, best unused rule count, average fitness, " \
-					 "average test, average rule count, average unused rule count "
-		arch.saveEvo(log_string)
+		'''
+		Main function of the evolutionary process
+		'''
 
 
-		# Build the training database with all motifs
-		if self.config["fitness_alg"] == "motif":
-			for i in range (self.MIN_motif_size, self.MAX_motif_size+1):
-				if self.db_strat == 'std': 	# Best CEST value
-					dbmotif = motif_bank.standard_motif_bank(i, self.alphabet)
-				if self.db_strat == 'avg':	# Average CEST value 
-					dbmotif = motif_bank.average_motif_bank(i, self.alphabet)
-				if self.db_strat == 'occ':	# Number of motif in each class define the classe
-					dbmotif = motif_bank.occ_motif_bank(i, self.alphabet)
-			# print(dbmotif)
-			# exit()
+		###########################################
+		###                                     ###
+		###            CONFIGURATION            ###
+		###                                     ###
+		###########################################
 
+		R.seed(self.seed) # activate the seed
+		print('[INFO] Seed:', self.seed)
+
+		# Initialisation of instance of the Fitness/Archivist/Evaluation classes for later usage
+		fitness_instance = F.Fitness(self.config)
+		archive_instance = Archivist.Archivist(self.config)
+		evaluate_instance = Evaluation.Eval(self.config)
+		individual_instance = I.Individual(self.config)
+
+		# Metrics
+		dev_fitness_count = [] 	# List: std. dev. of fitness values of all individuals /run
+		dev_rule_count = []    	# List: std. dev. of number of rule/regex of all individuals /run
+		population_size = []	# List: population size /run
+
+
+		# save the evolution information in a log
+		log_string = "Run;best_fitness;best_rule_count;average_fitness;" \
+					 "average_rule_count;Population_size;Time;Eval_time;" \
+					 "Xover_time;Mut_time;mAR;mRR;mReR;mCW;mReS;mRFP;mRN;mAA"
+		archive_instance.saveEvo(log_string)
 
 
 
@@ -141,113 +281,55 @@ class Optimizer:
 		###                                     ###
 		###########################################
 
-		# loop in all generations
+		if self.verbose == 'True':
+			print('[INFO] Running the Evolution process')
+
+		# 1st evaluation of each individual + initialisation of the best individual
+		x = time.time()
+		bestIndividual = self.first_evaluation(fitness_instance, self.P.pop[0], self.verbose)
+
+		# print('BEST INDI a la 1ere EVAL')
+		# bestIndividual.print()
+		# print('---------------')
+
+		y = time.time()
+		z = round(y-x, 2)
+		# print('------- la 1ere EVAL prend', z, 's')
+
+
+		# Main evolution loops
 		for RUN in tqdm(range(self.runs)):
-			self.mutation_count = 0 # to count the number of a type of mutation
+			start_time = time.time()
 
-			# Measure fitness
-			avgFitness = [] # Average Fitness of all individuals
-			avgRuleCount = [] # Average number of rule/regex
-			avgUsedRulesCount  = 0.0 # Average number of rule/regex used (0 - 1)
+			# Initialization - Metrics Avg. fitness/Rules
+			avgFitness = [] 	# Average Fitness of all individuals
+			avgRuleCount = [] 	# Average number of rule/regex
 
-			# Temporarily set the first member of the pop as the best member, 
-			# to calculate the best fitness
-			starter = self.P.pop[0]
+			if self.stop_condition(stop=20):
+				print(f'[WARNING] the evolutionary process was interrupted at run {RUN} ' \
+					  f'because the fitness was not increasing anymore')
+				break
 
-			# compute the fitness value of the temporary best individual
-			fitness.measureTotal(starter, dbmotif)
-			bestIndividual = starter
-
-			if self.verbose == 'True' and RUN != 0:
-				print('\n','        --- Best individual ---')
-				bestIndividual.print()
-
-
-
-			###########################################
-			###                                     ###
-			###             EVALUATION              ###
-			###                                     ###
-			###########################################
-
-			for i, individual in enumerate(self.P.pop):
-
-				# Compute the fitness value of each individual
-				fitness.measureTotal(individual, dbmotif)
-
-				# Set the best individual
-				if self.config["fitness_alg"] == "RMSE2":
-					if individual.fitness < bestIndividual.fitness:
-						bestIndividual = individual
-						del self.P.pop[i] # on supprime le nouveau meilleur individeu
-						self.P.pop.insert(0, bestIndividual) # on l ajoute au debut en position 1
-				elif self.config["fitness_alg"] == "motif":
-					if individual.fitness > bestIndividual.fitness:
-						# bestIndividual = individual
-						bestIndividual = individual
-						del self.P.pop[i] # on supprime le nouveau meilleur individeu
-						self.P.pop.insert(0, bestIndividual) # on l ajoute au debut en position 1
+			elite = copy.deepcopy(bestIndividual) 	# We keep a copy of the elite before crossover and mutation
 			
-				avgFitness.append(individual.fitness)
-				avgRuleCount.append(len(individual.rules)) # number of rules of the individual
+			# print('ELITE au debut du RUN')
+			# elite.print()
+			# print('---------------')
 
-				avgUsedRulesCount += individual.usedRulesCount # number of rules matched with dataset (status=1)
-
-			# current_time = now.strftime("%H:%M:%S")
-
-			# To calculate the average metrics
-			self.deviation_fitness_count.append(np.std(avgFitness)) # std. dev of avg fitness
-			self.deviation_rule_count.append(np.std(avgRuleCount))
+			# bestIndividual = max( self.P.pop, key=lambda x: x.fitness)
+			# print('BEST INDI au debut du RUN')
+			# bestIndividual.print()
+			# print('---------------')
 
 
-			avgFitness = round(mean(avgFitness), 3)
-			avgRuleCount = round(mean(avgRuleCount), 0)
-			# avgRuleCount = round(avgRuleCount / self.pop_size, 0)
-
-			avgUsedRulesCount = round(avgUsedRulesCount / self.pop_size, 0)
-			
-			# To calculate the best metrics
-			bestFitness = round(bestIndividual.fitness, 3)
-			bestRuleCount = len(bestIndividual.rules)
-
-			bestUsedRulesCount = bestIndividual.usedRulesCount
-
-			# Log the outcome before doing the changes to the population / generating a new population
-			print_string = f"Run {RUN}: -b {bestFitness} -rc {bestRuleCount} -urc {bestUsedRulesCount} ||| -a {avgFitness} -arc {avgRuleCount} -aurc {avgUsedRulesCount}"
-			log_string = f"{RUN},{bestFitness},{bestRuleCount},{bestUsedRulesCount},{avgFitness},{avgRuleCount},{avgUsedRulesCount}"
-			
-			self.best_fitness_list.append(bestFitness)
-			self.avg_fitness_list.append(avgFitness)
-
-			self.best_rule_count.append(bestRuleCount)
-			self.avg_rule_count.append(avgRuleCount)
-
-
-			# Print the evolutionary log
-			if self.verbose == 'True':
-				print(print_string, flush=True)
-
-			# Log the evolution
-			arch.saveEvo(log_string)
-
-			# Create a copy of the population = New pop
-			newPop = copy.deepcopy(self.P)
-			newPop.pop.clear() # Erase all individual of pop
-			newPop.pop.append(bestIndividual) # Elitism
-
-			# Save the best model    --- Create function
-			self.save_best_model(arch, bestIndividual)
+			# Sort the population according to the fitness value and get the best individual
+			# bestIndividual = max( self.P.pop, key=lambda x: x.fitness)
+			elite = copy.deepcopy(bestIndividual) 	# We keep a copy of the elite before crossover and mutation
 
 
 
-
-			# We keep a copy of the elite
-
-			# RMSE2
-			elite = copy.deepcopy(self.P.pop[0])
-
-			# MOTIF
-			# elite = bestIndividual
+			# Create a new empty population to store the futur offspring
+			newPop = Population.Population(self.config, empty=True)
 
 
 			###########################################
@@ -255,96 +337,57 @@ class Optimizer:
 			###              CROSSOVER              ###
 			###                                     ###
 			###########################################	
+			
+
+			x = time.time()
+
+			# crossover step
+			p1 = 0
+			p2 = 0
+			p3 = 0
+			p4 = 0
+
+			for _ in range(len(self.P.pop)): 
+
+				# self.P.pop[_].print()
+
+				a1,a2,a3,a4 = self.run_crossover(I, newPop)
+				p1+=a1
+				p2+=a2
+				p3+=a3
+				p4+=a4
+
+			# print('------- les OFFSPRING prennent', p1,p2,p3,p4, 's')
 
 
-			for k in range(len(self.P.pop) - 1):
-				# Create a new empty offspring
-				# offspring = I.Individual(self.config) 
-				offspring1 = I.Individual(self.config) 
-				offspring2 = I.Individual(self.config) 
-
-				# Selection of 2 parents for crossover with Tournament method
-				parentA, _ = self.tournament() # ne pas selectionner 2 indi du meme tournoi mais 1 par tournoi *2 !!!!!!!!
-				parentB, _ = self.tournament()
-
-				# print('---- Parent A ----')
-				# parentA.print()
-				# print('\n---- Parent B ----')
-				# parentB.print()
-				# print('\n\n')
-
-
-				# Run crossover between 2 parents, return the list of rules
-				# rules = self.crossover(parentA, parentB)
+			y = time.time()
+			crossover_time = round(y-x, 2)
+			# print('------- le CROSSOVER prend', crossover_time, 's')
 
 
 
 
 
-				r1, r2 = self.OP_crossover_twice(parentA, parentB)
-				offspring1.rules = r1
-				offspring2.rules = r2
-
-				
-
-				# Supprimes les regles en doubles
-				offspring1.remove_double_rules()
-				offspring2.remove_double_rules()
-
-				# Recalculer la fitness des offspring
-				if self.config["fitness_alg"] == "motif":
-					offspring1.compute_fitness()
-					offspring2.compute_fitness()
-
-				fitness.measureTotal(offspring1, dbmotif)
-				fitness.measureTotal(offspring2, dbmotif)
-				
-				# print('--- APRES CROSSOVER ---')
-				# print('---- Enfant A ----')
-				# offspring1.print()
-				# print('\n---- Enfant B ----')
-				# offspring2.print()
-				# print('\n\n')
-
-			# 	# offspring.rules = rules
-
-			# 	# offspring.bubbleSort() # Sort rules according to their length
-				offspring1.bubbleSort() # Sort rules according to their length
-				offspring2.bubbleSort() # Sort rules according to their length
-
-			# 	# Resize the offspring so it doesn't exceed the maximum allowed count
-			# 	# while len(offspring.rules) > self.ruleCount:
-			# 	# 	del (offspring.rules[-1])
 
 
-				while len(offspring1.rules) > self.ruleCount:
-					del (offspring1.rules[-1])
 
-				while len(offspring2.rules) > self.ruleCount:
-					del (offspring2.rules[-1])
 
-				# add offspring
-				a=1
-				# In a new population (only Child)
-				if a == 0:
-					newPop.pop.append(offspring1)
-					newPop.pop.append(offspring2)
-				# In the current population (Child + parents)
-				else:
-					self.P.pop.append(offspring1)
-					self.P.pop.append(offspring2)
 
-			if a == 0:
-				# Replace the population by the newPop containing only the offspring
-				self.P.pop = copy.deepcopy(newPop.pop)
-				print('POPULATION SIZE', len(self.P.pop))
-			else:
-				# The population contain parents + children
-				print('POPULATION SIZE', len(self.P.pop))
 
-			# # We keep a copy of the elite
-			# elite = copy.deepcopy(self.P.pop[0])
 
+
+			# # Replace the population by the newPop containing only the offspring
+			# if self.insertion_mtd == 'generational':
+			# 	self.P.pop.clear() # Erase all individual of pop
+			# 	self.P.pop = copy.deepcopy(newPop.pop)
+
+			# # Add offspring in the previous generation to mix parent + offspring
+			# elif self.insertion_mtd == 'mix':
+			# 	self.P.pop += newPop.pop
+			# else:
+			# 	print('[ERROR] The population insertion method is wrong, '\
+			# 		  'choose between generational or mix, in the config.ini file')
+			# 	exit()
 
 
 			###########################################
@@ -353,87 +396,238 @@ class Optimizer:
 			###                                     ###
 			###########################################
 
-			for indv in self.P.pop:
-				indv.remove_double_rules()
-
-				# mutations
-					# -- On Model --
-
-				# add a new rule/regex    - OK
-				if R.random() <= self.mAR:
-					self.MUT_add_rule(indv)
-
-				# remove a rule/regex     - OK
-				if R.random() <= self.mRR:
-					if len(indv.rules) != 0:
-						self.MUT_remove_rule(indv)
-
-
-				# Sort individual's rules according to their complexity
-				indv.bubbleSort()
-
-				# # Recalcule la fitness des individus apres les mutations
-				# fitness.measureTotal(indv, dbmotif)
+			dico_cnt_mut = {'cnt_add_rule':0,
+							'cnt_remove_rule':0,
+							'cnt_replace_rule':0,
+							'cnt_replace_subtree':0,
+							'cnt_add_aa':0,
+							'cnt_replace_node':0,
+							'cnt_remove_subtree':0}
 
 
 
+
+			x = time.time()
+
+			# for indv in self.P.pop: # les mutations sont effectuees sur les parents + offspring uniquement
+			for indv in newPop.pop: # les mutations sont effectuees sur les offspring uniquement
+				# R.seed(self.seed)
+
+				self.run_mutations(indv, dico_cnt_mut) 	# actuellement chaque individu a une proba p de subir chaque mutation
+														# on peut aussi imaginer qu'un individu a une proba p de subir qu'une seule mutation
+				indv.remove_double_rules_old() # Duplicates are removed + the rules too similar
+				indv.complexitySort() # Sort individual's rules according to their complexity
+
+			y = time.time()
+			mut = round(y-x, 2)
+			# print('------- Etape 1 -  mutation + remove prend', mut, 's')
+
+			# x = time.time()
+
+			# pool = multiprocessing.Pool(process=100)
+
+			# indis2 = pool.map(self.remove_double_rules, newPop.pop)
+
+			# # newPop.pop.clear() # Erase all individual of pop
+			# # newPop.pop = copy.deepcopy(indis2)
+
+			# pool.close()
+			# pool.join()
+
+			# y = time.time()
+			# mut = round(y-x, 2)
+			# print('------- Etape 2 -  mutation prend', mut, 's')
+
+
+			# x = time.time()
+
+			# for indv in newPop.pop: # les mutations sont effectuees sur les offspring uniquement
+			# 	indv.remove_double_rules_old() # Duplicates are removed + the rules too similar
+			# 	indv.complexitySort() # Sort individual's rules according to their complexity
+
+
+
+
+
+				# Verifier ici quon supprime bien les doubles parce quil y a un bug
+
+
+	
+			# y = time.time()
+			# mut = round(y-x, 2)
+			# print('------- Etape 3 -  mutation prend', mut, 's')
+			# for indv in newPop.pop: # les mutations sont effectuees sur les offspring uniquement
+
+			# 	# indv.remove_double_rules() # Duplicates are removed + the rules too similar
+				
+			# 	indv.complexitySort() # Sort individual's rules according to their complexity
+
+
+
+
+				# a commenter si //
+				# indv.fitness = fitness.evaluate_individual(indv)
+
+
+			# recalculate the fitness value because operators can impact the individual //
+
+			start_eval_time = time.time()
+			pool2 = multiprocessing.Pool()
+
+			# renvoie une liste de nouveaux individus
+			tprPop = pool2.map(fitness_instance.evaluate_individual, newPop.pop)
+			
+			pool2.close()
+			pool2.join()
+
+			stop_eval_time = time.time()
+			eval_time = round((stop_eval_time - start_eval_time), 2)
+			# print(f'----- Evaluation step took {eval_time} sec.')
+
+
+
+
+
+			# for j, i in enumerate(indis2):
+			# 	i.print()
+			# 	print(j, '+++')
+			# for j, i in enumerate(newPop.pop):
+			# 	i.print()
+			# 	print(j, '---')
+
+			# for j, i in enumerate(indis):
+			# 	i.print()
+			# 	print(j, '***')
+
+
+
+			# bestIndividual = max(indis, key=lambda x: x.fitness)
+
+			# print('bestIndividual apre Xover et mutation')
+			# bestIndividual.print()
+			# print('---------------')
+
+
+			# on selectionne le nouveau meilleur individu
+			bestIndividual = copy.deepcopy(max(tprPop, key=lambda x: x.fitness))
 			
 
 
-				# # -- On Rule --
-				for rule in indv.rules:
 
-					# change weight of the rule 	- OK
-					if R.random() <= self.mCW:
-						self.MUT_change_weight(rule)
 
-					# # Replace to pattern - point mutation (modify a branch of the tree)     - OK
-					# if R.random() <= self.mATP:
-					# 	self.MUT_replace_subtree(rule)
-					
-			# 		# # Replace the value of one node (invert or replace) 	- ~~~
-			# 		if R.random() <= self.mPP:
-			# 			self.MUT_ponctual_point(rule)
+			# bestIndividual.remove_double_rules_old()
+			# bestIndividual.compute_fitness()
 
-			# 		# remove from pattern      - dont work
-			# 		# if R.random() <= self.mRFP:
-			# 		# 	# pick a random node (avoid None node and root)
-			# 		# 	self.MUT_remove_from_pattern(rule)
+			# print('Nouveau bestIndividual apre Xover mutation remove double et selection')
+			# bestIndividual.print()
+			# print('---------------')
 
 
 
-			# 		# Add X new AA in a leaf node       - OK
-			# 		if R.random() <= self.mAA:
-			# 			random_node = self.pick_a_node(rule.tree_shape)
-			# 			self.MUT_add_alphabet(rule, random_node)
-
-			
-				# Recalcule la fitness des individus apres les mutations
-				fitness.measureTotal(indv, dbmotif)
+			# print('Elite apre Xover et mutation')
+			# elite.print()
+			# print('---------------')
 
 
-
-			# the indi #1 (elite) could be affected by a mutation and his fitness could decrease
-			# So, the fitness is calculated again and compared to the previous elite value
-			# fitness.measureTotal(self.P.pop[0], dbmotif)
-
-
-
-
-
-			if self.config["fitness_alg"] == "RMSE2":
-				if elite.fitness < self.P.pop[0].fitness:
-					self.P.pop[0] = elite
 			if self.config["fitness_alg"] == "motif":
-				if elite.fitness > self.P.pop[0].fitness:
-					self.P.pop[0] = elite
+				if bestIndividual.fitness < elite.fitness:
+					# bestIndividual = copy.deepcopy(bestIndividual)
+					bestIndividual = copy.deepcopy(elite)
+					# print('Elite si Elite est meilleur')
+					# elite.print()
+					# print('---------------')
+
+					# print('bestIndividual si Elite est meilleur')
+					# bestIndividual.print()
+					# print('---------------')
+
+
+
+			x = time.time()
+			# newPop.pop.clear() # Erase all individual of pop
+			# newPop.pop = copy.deepcopy(tprPop)
+			# newPop.pop.append(elite) # Elitism
+
+			tprPop.append(elite)
+
+			y = time.time()
+			z = round((y - x), 2)
+			# print(f'------- Copy de la pop prend {z} sec.')
+
+
+
+
+
+			# print('Elite FINAL')
+			# elite.print()
+			# print('---------------')
+
+
+
+
+			# for i in newPop.pop:
+			# 	i.print()
+
+
+
+			# print(len(newPop.pop), '-------------------------------------------')
+			# for i in newPop.pop:
+			# 	i.print()
+			# exit()
+
+
+			# # the indi #1 (elite) could be affected by a mutation and his fitness could decrease
+			# # So, the fitness is calculated again and compared to the previous elite value
+			# if self.config["fitness_alg"] == "RMSE2":
+			# 	if bestIndividual.fitness < elite.fitness:
+			# 		elite = copy.deepcopy(bestIndividual)
+
+			# if self.config["fitness_alg"] == "motif":
+			# 	if indv.fitness > elite.fitness:
+			# 		bestIndividual = copy.deepcopy(indv)
+			# 		elite = copy.deepcopy(indv)
+
 
 			
+			
 
-			# self.list_mutation.append(self.mutation_count) # pour compter les mutations qui ont eu lieu
+			# # the indi #1 (elite) could be affected by a mutation and his fitness could decrease
+			# # So, the fitness is calculated again and compared to the previous elite value
+			# if self.config["fitness_alg"] == "RMSE2":
+			# 	if bestIndividual.fitness < elite.fitness:
+			# 		elite = copy.deepcopy(bestIndividual)
 
-			# for indv in self.P.pop:
-			# 	self.removeExtra(indv)
+			# if self.config["fitness_alg"] == "motif":
+			# 	if best.fitness > elite.fitness:
+			# 		bestIndividual = copy.deepcopy(best)
+			# 		elite = copy.deepcopy(best)
+
+
+		
+
+
+
+
+			x = time.time()
+
+
+			# replace the population by the newPop containing only the offspring
+			if self.insertion_mtd == 'generational':
+				self.P.pop.clear() # Erase all individual of pop
+				self.P.pop = copy.deepcopy(tprPop)
+				self.P.pop.append(elite) # Elitism
+
+			# Add offspring in the previous generation to mix parent + offspring
+			elif self.insertion_mtd == 'mix':
+				self.P.pop += tprPop
+			else:
+				print('[ERROR] The population insertion method is wrong, '\
+					  'choose between generational or mix, in the config.ini file')
+				exit()
+
+			y = time.time()
+			z = round((y - x), 2)
+			# print(f'------- ajoute de pop parent + enfant prend {z} sec.')
 
 
 
@@ -443,32 +637,119 @@ class Optimizer:
 			###                                     ###
 			###########################################
 
-			FinalPop = copy.deepcopy(self.P)
-			FinalPop.pop.clear() # Erase all individual of pop
+			x = time.time()
+
+			# Create a copy of the current population => FinalPop
+			FinalPop = Population.Population(self.config, empty=True)
+
+
+
+			# FinalPop = copy.deepcopy(self.P)
+			# FinalPop.pop.clear() # Erase all individual of pop
 			FinalPop.pop.append(elite) # Elitism
+			FinalPop.pop.append(bestIndividual) # Elitism
+			
+
+			# [RANK method]
+			if self.reduction_method == 'rank':
+				# Reduce the population according to their fitness
+				sorted_pop = sorted(self.P.pop, key=lambda x: x.fitness, reverse=True)
+				FinalPop.pop = sorted_pop[0:self.pop_size]
+
+			# [TOURNAMENT method]
+			elif self.reduction_method == 'tournament':
+				# Reduce the population according to a tournament selection
+				while len(FinalPop.pop) < self.pop_size:
+					selected_individual = self.pop_tournament_reduction() 
+					FinalPop.pop.append(selected_individual)
+			else:
+				print('[ERROR] The reduction method is wrong, choose between '\
+				      'tournament or rank, in the config.ini file')
+
+			y = time.time()
+			z = round((y - x), 2)
+			# print(f'------- REDUCTION prend {z} sec.')
 
 
-			while len(FinalPop.pop) < self.pop_size:
-				selected_individual = self.population_reduction()
-				FinalPop.pop.append(selected_individual)
 
+			# Save the best model of the current run
+			self.save_best_model(archive_instance, elite, self.verbose)
+
+			# Erase all individual from P.pop and replace them by individuals from FinalPop.pop
+			self.P.pop.clear() 
 			self.P.pop = copy.deepcopy(FinalPop.pop)
-			print('POPULATION SIZE', len(self.P.pop))
-
-			self.nbr_add_rule.append(self.counter_add_rule)
-			self.nbr_remove_rule.append(self.counter_remove_rule)
-			self.nbr_replace_tree.append(self.counter_replace_tree)
-			self.counter_add_rule = 0
-			self.counter_remove_rule = 0
-			self.counter_replace_tree = 0
 
 
 
 
-			# To Log the time
-			# end_time = int(round(time.time() * 1000)) - start_time
-			# exit()
-		# print(end_time)
+
+			for indv in self.P.pop:
+				# Metrics
+				avgFitness.append(indv.fitness) # fitness of each individual
+				avgRuleCount.append(len(indv.rules)) # number of rules of the individual
+
+
+			# # Metrics - std. dev of fitness/rule count for each run
+			dev_fitness_count.append(np.std(avgFitness))
+			dev_rule_count.append(np.std(avgRuleCount))
+			
+			# Metrics - Best fitness/rule count
+			bestFitness = round(bestIndividual.fitness, 3)
+			bestRuleCount = len(bestIndividual.rules)
+
+			# Metrics - Average of fitness/rule count
+			avgFitness = round(mean(avgFitness), 3)
+			avgRuleCount = int(round(mean(avgRuleCount), 0))
+
+			
+			# # Metrics
+			# self.best_fitness_list.append(bestFitness)
+			# self.best_rule_count.append(bestRuleCount)
+			# self.avg_fitness_list.append(avgFitness)
+			# self.avg_rule_count.append(avgRuleCount)
+
+
+
+
+
+			# count the number of mutations
+			self.f_add_rule.append(dico_cnt_mut['cnt_add_rule'])
+			self.f_remove_rule.append(dico_cnt_mut['cnt_remove_rule'])
+			self.f_replace_rule.append(dico_cnt_mut['cnt_replace_rule'])
+			self.f_replace_subtree.append(dico_cnt_mut['cnt_replace_subtree'])
+			self.f_add_aa.append(dico_cnt_mut['cnt_add_aa'])
+			self.f_replace_node.append(dico_cnt_mut['cnt_replace_node'])
+			self.f_remove_subtree.append(dico_cnt_mut['cnt_remove_subtree'])
+
+			
+
+
+
+
+			# Time/Run
+			stop_time = time.time()
+			diff_time = stop_time - start_time
+			# run_time.append(diff_time)
+
+			print_string = f"\n\nRun {RUN}: -best {bestFitness} -brc {bestRuleCount} || -avg {avgFitness} -arc {avgRuleCount} "
+			print(print_string)
+
+			print('\n     [- Best individual -]\n')
+			bestIndividual.print()
+
+			log_string = f"{RUN};{bestFitness};{bestRuleCount};{avgFitness};{avgRuleCount};{len(self.P.pop)};{diff_time};{eval_time};{crossover_time};{mut}"
+			
+			# Log the evolution information
+			archive_instance.saveEvo(log_string)
+
+			# ajoute la meilleure fitness pour voir si on doit arreter l'algo ou non
+			self.stop_fitness.append(bestFitness)
+
+
+			
+
+			
+
 
 		###########################################
 		###                                     ###
@@ -476,140 +757,219 @@ class Optimizer:
 		###                                     ###
 		###########################################
 
+		# lance le model sur le jeu de donnees pour voir s'il y a une correlation
+		evaluate_instance.regex_matching()
 
 
-		# draw Best and Average Fitness
-		fig, ax = plt.subplots(3)
+		# cree le dataframe avec les Scores en fonction des cest value
+		df_eval = evaluate_instance.df
+		df_mock = evaluate_instance.df_mock
 
-		ax[0].plot(range(self.runs), self.best_fitness_list, label='Best')
-		# ax1.plot(range(self.runs), self.avg_fitness_list, label='Avg')
-		ax[0].errorbar(range(self.runs), self.avg_fitness_list, yerr=self.deviation_fitness_count, label='Avg', ecolor='black', elinewidth=0.5)
-		ax[0].set_ylabel('Fitness')
-		ax[0].spines['right'].set_visible(False)
-		ax[0].spines['top'].set_visible(False)
 
-		X_axis = np.arange(self.runs)
+		# df des metrics
+		df_ref = pd.read_csv('output/evo.csv', sep=';')
 
-		ax[1].bar(X_axis, self.nbr_add_rule,0.2, label='Add mt')
-		ax[1].bar(X_axis+0.2, self.nbr_remove_rule,0.2, label='Remove mt')
-		ax[1].bar(X_axis+0.4, self.nbr_replace_tree,0.2, label='Replace mt')
-		ax[1].set_ylabel('Number')
 
-		ax[2].plot(range(self.runs), self.best_rule_count, label='Best')
-		# ax[2].plot(range(self.runs), self.avg_rule_count, label='Avg')
-		ax[2].errorbar(range(self.runs), self.avg_rule_count, yerr=self.deviation_rule_count, label='Avg', ecolor='black', elinewidth=0.5)
+		dico_mutation = {	'add_rule':self.f_add_rule,
+							'remove_rule':self.f_remove_rule,
+							'replace_rule':self.f_replace_rule,
+							'replace_subtree':self.f_replace_subtree,
+							'add_aa':self.f_add_aa,
+							'replace_node':self.f_replace_node,
+							'remove_subtree':self.f_remove_subtree }
 
-		ax[2].set_ylabel('Number of rules')
-		ax[2].set_xlabel('Generation')
+		df_mut = pd.DataFrame.from_dict(dico_mutation)
 
-		plt.subplots_adjust(hspace = 0.4)
+		df_mut_T = df_mut.T # invert the df
 
-		for i in ax:
-			i.legend()
-		plt.show()
+		# nb_line, nb_col = 3, 2
+
+		plt.rcParams['axes.spines.right'] = False
+		plt.rcParams['axes.spines.top'] = False
+		plt.rcParams['font.size'] = 10
+
+
+		# self.plot_fitness(df_ref, dev_fitness_count)
+		# self.plot_rule_count(df_ref, dev_rule_count)
+		# self.plot_mutations(df_mut)
+
+
+		fig, ax = plt.subplots(3, 2)
+
+		# Best and Average Fitness
+		ax[0,0].errorbar(df_ref['Run'], df_ref['average_fitness'], yerr=dev_fitness_count, label='Avg',linewidth=1, ecolor='black', elinewidth=0.3, color='#f39c12')
+		sns.lineplot(ax=ax[0,0], data=df_ref, x='Run', y='best_fitness', color='#27ae60', linewidth=1, label='Best')
+		ax[0,0].set_ylabel('Fitness')
+		ax[0,0].set_xlabel('Generation')
+
+		# Rule count
+		ax[0,1].errorbar(df_ref['Run'], df_ref['average_rule_count'], yerr=dev_rule_count, label='Avg',linewidth=1, ecolor='black', elinewidth=0.3, color='#f39c12')
+		sns.lineplot(ax=ax[0,1], data=df_ref, x='Run', y='best_rule_count', color='#27ae60', linewidth=1, label='Best')
+		ax[0,1].set_ylabel('Number of rules')
+		ax[0,1].set_xlabel('Generation')
+
+
+		# mutations violin plot
+		sns.violinplot(ax=ax[1,0], data=df_mut, palette="Set3", bw=.2, cut=1, linewidth=1, yticklabels=['+R', '-R', '*R', '*ST', '+AA', '*N', '-ST'])
+		ax[1,0].set_ylabel('Number of mutations')
+
+		# Mutation heatmap
+		a = sns.heatmap(ax=ax[1,1], data=df_mut_T, yticklabels=['+R', '-R', '*R', '*ST', '+AA', '*N', '-ST'], cmap='RdYlGn')
+		ax[1,0].set_xlabel('Generation')
+
+		# Time
+		sns.lineplot(ax=ax[2,0], data=df_ref, x='Run', y='Time', color='#2980b9', linewidth=1, label='Global')
+		sns.lineplot(ax=ax[2,0], data=df_ref, x='Run', y='Eval_time', color='orange', linewidth=1, label='Eval.')
+		sns.lineplot(ax=ax[2,0], data=df_ref, x='Run', y='Xover_time', color='green', linewidth=1, label='Xover.')
+		sns.lineplot(ax=ax[2,0], data=df_ref, x='Run', y='Mut_time', color='#B233FF', linewidth=1, label='Mutation')
 		
 
-		print('The BEST individual is:')
+		ax[2,0].set_ylabel('Seconds')
+		ax[2,0].set_xlabel('Generation')
+
+		# Evaluation
+		sns.regplot(ax=ax[2,1], x='CEST_value',y='Predicted_score', data=df_eval,  line_kws={'color':'lightblue', 'lw':0.5 }, scatter_kws={'color':'lightblue', "s": 1, 'alpha':0.5})
+		sns.regplot(ax=ax[2,1], x='CEST_value',y='Predicted_score', data=df_mock,  line_kws={'color':'orange',  'lw':0.5 }, scatter_kws={'color':'orange', "s": 1, 'alpha':0.5})
+		# sns.jointplot(x='CEST_value',y='Predicted_score', data=df, color='red', line_kws={'color':'blue', 'lw':0.5 }, scatter_kws={'color':'green', "s": 1, 'alpha':0.5}, kind="reg")
+		# ax[2,1].scatter(evaluate.final_dico.keys(),evaluate.final_dico.values(), marker='x')
+		ax[2,1].set_ylabel('Score')
+		ax[2,1].set_xlabel('CEST value')
+		# compute r2
+		r, p = sp.stats.pearsonr(list(evaluate_instance.final_dico.keys()), list(evaluate_instance.final_dico.values()))
+		rm, pm = sp.stats.pearsonr(list(evaluate_instance.final_dico_mock.keys()), list(evaluate_instance.final_dico_mock.values()))
+		ax[2,1].text(.05, .8, 'r={:.2f}, p={:.2g}'.format(r, p))
+		ax[2,1].text(4, 5, '(Mock) r={:.2f}, p={:.2g}'.format(rm, pm))
+
+
+
+		plt.tight_layout()
+		plt.savefig("Results", dpi=300)
+		plt.subplots_adjust(hspace = 0.4)
+
+		plt.show()
+
+
+		# for i in range(2):
+		# 	for j in range(2):
+		# 		ax[i,j].legend()
+		# # for i in ax:
+		# # 	i.legend()
+		# plt.show()
+
+		print('The Best individual is:')
 		bestIndividual.print()	
 
 
+	def first_evaluation(self, fitness_object, bestIndividual, verbose):
+		'''
+		Evaluate each individual according to the fitness function. The fitness
+		of an individiual is modified internally after the function evaluate_individual().
+
+		fitness_object: Instance of Fitness Class
+		bestIndividual: The current best Individual
+
+		return a new best individual
+		'''
+
+		if verbose == 'True':
+			print('[INFO] First evaluation step')
+
+		best_fitness_value = bestIndividual.fitness
+
+
+		for individual in self.P.pop:
+
+			# Calculate the fitness value of each individual
+			# individual.fitness = fitness_object.evaluate_individual(individual, lock)
+			_ = fitness_object.evaluate_individual(individual)
+
+			individual_fitness_value = individual.fitness
+
+			# Define the best individual
+			if self.config["fitness_alg"] == "RMSE2" and individual_fitness_value < best_fitness_value:
+				bestIndividual = copy.deepcopy(individual)
+			elif self.config["fitness_alg"] == "motif":
+				if individual_fitness_value > best_fitness_value:
+					bestIndividual = copy.deepcopy(individual)
+					best_fitness_value = bestIndividual.fitness
+
+		return bestIndividual
+
+
+	def plot_fitness(self, df, dev_fitness, name='Fitness_plot'):
+		plt.errorbar(df['Run'], df['average_fitness'], yerr=dev_fitness, label='Avg',linewidth=2, ecolor='black', elinewidth=0.5, color='#f39c12')
+		sns.lineplot(data=df, x='Run', y='best_fitness', color='#27ae60', linewidth=2, label='Best')
+
+		plt.xlabel('Generation')
+		plt.ylabel('Fitness')
+
+		plt.legend(loc='lower right')
+		plt.tight_layout()
+
+		plt.savefig(name, dpi=300)
+		plt.close()
+
+	def plot_rule_count(self, df, dev_rule_count, name='Rule_count_plot'):
+		plt.errorbar(df['Run'], df['average_rule_count'], yerr=dev_rule_count, label='Avg',linewidth=1, ecolor='black', elinewidth=0.3, color='#f39c12')
+		sns.lineplot(data=df, x='Run', y='best_rule_count', color='#27ae60', linewidth=1, label='Best')
+		plt.ylabel('Number of rules')
+		plt.xlabel('Generation')
+		plt.legend(loc='lower right')
+		plt.tight_layout()
+
+		plt.savefig(name, dpi=300)
+		plt.close()
+
+	def plot_mutations(self, df, name='Mutations_plot'):
+		# sns.heatmap(data=df, xticklabels=['+R', '-R', '*R', '*ST', '+AA', '*N', '-ST'], cmap='RdYlGn')
+		# sns.lineplot(data=df, linewidth=0.5, dashes=False, palette=['#8e44ad', '#2980b9', '#16a085', '#2ecc71', '#f1c40f', '#e67e22', '#c0392b'])
+		sns.violinplot(data=df, palette="Set3", bw=.2, cut=1, linewidth=1, rotation=40)
+
+		plt.xlabel('Generation')
+		plt.ylabel('Mutation')
+
+
+		plt.tight_layout()
+
+		plt.savefig(name, dpi=300)
+		plt.close()
 
 
 
 
 
+	def pop_tournament_reduction(self):
+		'''
+		Tournament for reduction step. Draw randomly X individuals (defaut=3)
+		then extract the best (highest fitness)
 
+		return the best selected individual
+		'''
 
+		tournament = []
 
-
-
-
-
-	def population_reduction(self):
-
-		draw, tournament = [], []
-
-		while len(tournament) < 3:
-			tmpIndi = R.randint(0, len(self.P.pop) - 1)
-		
-			# Avoid to draw the same individual twice in a tournament
-			if tmpIndi not in draw:
-				draw.append(tmpIndi)
-				tournament.append(self.P.pop[tmpIndi])
+		while len(tournament) < self.reduction_tournament_size: # par defaut 3
+			# Random draw of an individual and Avoid to draw the same individual twice in a tournament
+			tournament = R.sample(self.P.pop, self.reduction_tournament_size)
+			# Avoid individual without rules
+			tournament = [indv for indv in tournament]
 
 		# Sort individuals according to their fitness value
-		indiA, _ = self.sort_tournament(tournament) 
+		selected_indi = max(tournament, key=lambda x: x.fitness)
 
-		return indiA
+		return selected_indi
 
 
 	# a crossover between 2 rules, not between 2 individuals # NS
 	def internal_crossover(self):
+
 		pass
 
 
-	#  obtain 2 offsprings, not one # NS
-	def OP_crossover_twice(self, parentA, parentB):
-		# print("PARENT A")
-		# parentA.print()
-		# print("\n")
-		# print("PARENT B")
-		# parentB.print()
-		# print("\n")
-
-		if len(parentA.rules) == 0 or len(parentB.rules) == 0:
-			print('[ERROR] Optimizer.py - Crossover, a parent is empty')
-			print("PARENT A")
-			parentA.print()
-			print("PARENT B")
-			parentB.print()
-			exit()
-		elif len(parentA.rules) == "2": 		# debug ?
-			return parentB.rules, parentB.rules
-		elif len(parentB.rules) == "3": 		# debug ?
-			return parentA.rules, parentA.rules
-
-		else:
-			cutA = R.randint(0, len(parentA.rules)-1)
-			cutB = R.randint(0, len(parentB.rules)-1)
-			
-			rules_off1 = []
-			rules_off2 = []
-
-			# print("CUT",cutA, cutB)
-			# print("nb rules", len(parentA.rules), len(parentB.rules))
-
-			for i in range(cutA):
-				# print("i",i, parentA.rules[i].pattern)
-				rules_off1.append(parentA.rules[i])
-
-			for j in range(cutA, len(parentA.rules)):
-				rules_off2.append(parentA.rules[j])
-				# print("j", j, parentA.rules[j].pattern)
-
-			# print('-------------------------')
-			for k in range(cutB):
-				rules_off2.append(parentB.rules[k])
-				# print("k",k, parentB.rules[k].pattern)
-
-			for l in range(cutB, len(parentB.rules)):
-				rules_off1.append(parentB.rules[l])
-			# 	print("l",l, parentB.rules[l].pattern)
-			# print('----------OFF 1---------------')
-			# for r in rules_off1:
-			# 	print(r.pattern)
-			# print('----------OFF 2---------------')
-			# for r in rules_off2:
-			# 	print(r.pattern)
+	
 
 
-			# exit()
-			# print(len(rules_off1), len(rules_off2))
-			return rules_off1, rules_off2
-
-
-	# Obtain 1 offspring
-	def crossover(self, parentA, parentB):
+	def crossover_single(self, parentA, parentB):
 		'''
 		Function to perform the crossover between parentA 
 		and ParentB. Combine all the rules of ParentA and ParentB with status 1.
@@ -686,125 +1046,195 @@ class Optimizer:
 
 
 
+
+
+
 	def tournament(self):
 		'''
-		The tournament operator. Select the 2 best individuals on a subset of size 'self.tournamentSize'
-		(default = 5)
+		The tournament operator. Select the 2 best individuals
+		on a subset of size 'self.tournamentSize' (default = 5)
 
-		return : two best parents A and B
+		return: two best parents A and B
 		'''
 
-		tournament = []
-		draw = []
+		tournament = R.sample(self.P.pop, self.tournamentSize)
 
-		# Un individu ne peut jamais etre tire 2x
-		while len(tournament) < self.tournamentSize:
-			tmpIndi = R.randint(0, len(self.P.pop) - 1) # random draw of an individual
 
-			if len(self.P.pop[tmpIndi].rules) != 0: # Avoid individual without rules
-			
-				# Avoid to draw the same individual twice in a tournament
-				if tmpIndi not in draw:
-					draw.append(tmpIndi)
-					tournament.append(self.P.pop[tmpIndi])
+		# while len(tournament) < self.tournamentSize:
+		# 	# Random draw of an individual and Avoid to draw the same individual twice in a tournament
+		# 	tournament = R.sample(self.P.pop, self.tournamentSize)
+		# 	# Avoid individual without rules
+		# 	tournament = [indv for indv in tournament if len(indv.rules) != 0]
 
-		# Sort individuals according to their fitness value
-		# tournament = self.sort_tournament(tournament) 
-		parentA, parentB = self.sort_tournament(tournament) 
-
-		# We got two best parents of the tournaments
-		# parentA = copy.deepcopy(tournament[0])
-		# parentB = copy.deepcopy(tournament[1])
-
-		# print("Parent A")
-		# pa.print()
-		# print("Parent B")
-		# pb.print()
-		# exit()
-		return parentA, parentB
-
-	def sort_tournament(self, tournament):
-		'''
-		Function to sort each individual in the tournament according to their fitness value
-		tournament: Array with *self.tournamentSize* individuals
-
-		return a sorting array, from the best to the worst individual
-		'''
-		dico_indi = {}
-
-		for i, individual in enumerate(tournament):
-			dico_indi[i] = individual.fitness
-		dico_indi = dict(sorted(dico_indi.items(), key=lambda x:x[1]))
-
-		l = list(dico_indi.keys())
-
-		parentA = tournament[l[-1]]
-		parentB = tournament[l[-2]]
+		sorted_indices = list(reversed(sorted(tournament, key=lambda x: x.fitness)))
+		parentA, parentB = sorted_indices[0], sorted_indices[1]
 
 		return parentA, parentB
 
+	# def sort_tournament(self, tournament):
+	# 	'''
+	# 	Function to sort each individual in the tournament according to their fitness value
+	# 	tournament: Array with *self.tournamentSize* individuals
 
+	# 	return: two best parents A and B
 
-		# n = len(tournament)
-		# # Traverse through all array elements
-		# for i in range(n):
-		# 	# Last i elements are already in place
-		# 	for j in range(0, n - i - 1):
+	# 	'''
 
-		# 		# traverse the array from 0 to n-i-1
-		# 		# Swap if the element found is greater
-		# 		# than the next element
-		# 		if tournament[j].fitness > tournament[j + 1].fitness:
-		# 			tournament[j], tournament[j + 1] = tournament[j + 1], tournament[j]
-
-		# if self.config["diversity_selection"] == "False":
-		# 	return tournament
+	# 	fitness_values = [individual.fitness for individual in tournament]
+	# 	sorted_indices = sorted(range(len(fitness_values)), key=lambda i: fitness_values[i])
 		
+	# 	parentA = copy.deepcopy(tournament[sorted_indices[-1]])
+	# 	parentB = copy.deepcopy(tournament[sorted_indices[-2]])
 
-		# if self.config["diversity_selection"] != "True":
-		# 	raise "[ERROR] Unknown value for diversity_selection: choose between True or False"
+	# 	return parentA, parentB
+
+	def crossover_dual(self, parentA, parentB):
+		'''	
+		The crossover operator cuts each individual into two sub-parts, 
+		each containing a list of regex. Then, a part of individual 1 is exchanged 
+		with a part of individual 2, creating two offspring that are recombinations
+		of the two parents.
+
+		Parent A/B: an individual
+
+		return two list of rules for the 2 futur offspring	
+		'''
 		
-
-		# # other method to add diversity (not used with regex)
-
-		# patterns = [rule.pattern for rule in tournament[0].rules]
-		# highest_closeness = 0
-		# highest_fitness = 0
-		# w = float(self.config["diversity_weight"])
-
-
-		# for i in range(1, n):
-		# 	tournament[i].closeness = 0
-		# 	tournament[i].relative_fitness = 0
-
-		# 	# if an individual have a same pattern as the best individual of the tournament
-		# 	for rule in tournament[i].rules:
-		# 		if rule.pattern in patterns:
-		# 			tournament[i].closeness += 1
-
-		# 	if tournament[i].closeness > highest_closeness:
-		# 		highest_closeness = tournament[i].closeness
-
-		# 	if tournament[i].fitness > highest_fitness:
-		# 		highest_fitness = tournament[i].fitness
-
-		# # No individual is close to the best
-		# if highest_closeness == 0:
-		# 	return tournament
-
-		# for i in range(1, n):
-		# 	tournament[i].relative_fitness = tournament[i].fitness / highest_fitness + w * tournament[i].closeness / highest_closeness
+		if len(parentA.rules) == 0 or len(parentB.rules) == 0:
+			print('[ERROR] Optimizer.py - Crossover, a parent is empty')
+			print("PARENT A")
+			parentA.print()
+			print("PARENT B")
+			parentB.print()
+			exit()
 		
-		# t2 = tournament[1:n]
-		# t2.sort(key=lambda x: x.relative_fitness, reverse=False)
+		else:
+			# define the limits where to cut the table of rules
+			cutA = R.randint(0, len(parentA.rules)-1)
+			cutB = R.randint(0, len(parentB.rules)-1)
 
-		# return tournament[0], t2[0]
+			rules_off1 = copy.deepcopy(parentA.rules[:cutA]) + copy.deepcopy(parentB.rules[cutB:])
+			rules_off2 = copy.deepcopy(parentB.rules[:cutB]) + copy.deepcopy(parentA.rules[cutA:])
+
+		return rules_off1, rules_off2
+
+	def run_crossover(self, individual_object, newPop):
+		'''
+		Run the crossover step
+
+		individual_object: instance of the class Individual
+		newPop: New population where to add the offspring
+		'''
+
+		# Create 2 new empty offspring
+		offspring1 = individual_object.Individual(self.config) 
+		offspring2 = individual_object.Individual(self.config) 
+
+		d = time.time()
+		# Selection of 2 parents with Tournament method (default pressur selection=5)
+		parentA, x = self.tournament()
+		parentB, x = self.tournament()
+		e = time.time()
+		ee=e-d
+
+		f = time.time()
+		# Crossover operator: obtain 2 new list of rules
+		r1, r2 = self.crossover_dual(parentA, parentB)
+		g = time.time()
+		gg=g-f
+
+
+		# Define the rules of the new offspring
+		offspring1.rules = r1
+		offspring2.rules = r2
+
+		a = time.time()
+		# remove duplicate/close rules
+		# offspring1.remove_double_rules()
+		# offspring2.remove_double_rules()
+		b = time.time()
+		cc = b-a
+
+
+		# Sort rules according to their complexity
+		# offspring1.complexitySort() 
+		# offspring2.complexitySort() 
+		
+		# Resize the offspring so it doesn't exceed the maximum allowed count
+		if len(offspring1.rules) > self.ruleCount:
+			offspring1.rules = offspring1.rules[:self.ruleCount]
+		if len(offspring2.rules) > self.ruleCount:
+			offspring2.rules = offspring2.rules[:self.ruleCount]
+
+		h= time.time()
+		# Calculate the fitness of the offspring
+		if self.config["fitness_alg"] == "motif":
+			offspring1.compute_fitness()
+			offspring2.compute_fitness()
+		j= time.time()
+		jj=j-h
+
+		# Insertion of the new offspring in the population
+		newPop.pop.append(offspring1)
+		newPop.pop.append(offspring2)
+
+		return ee,gg,cc,jj
+
+
+	def run_mutations(self, indv, dico_cnt_mut):
+		# add a new rule/regex
+		if len(indv.rules) < self.ruleCount:
+			if R.random() <= self.mAR:
+				self.MUT_add_rule(indv, dico_cnt_mut)
+
+		# remove a rule/regex
+		if len(indv.rules) > 1:
+			if R.random() <= self.mRR:
+				self.MUT_remove_rule(indv, dico_cnt_mut)
+
+		# replace a rule/regex
+		if len(indv.rules) >= 1:
+			if R.random() <= self.mReR:
+				self.MUT_replace_rule(indv, dico_cnt_mut)
+
+		# le pb si on active cette mutation (qui marche), on obtient des individus
+		# qui ont X fois a peu de chose pres les meme regex. ils convergent tous 
+		# vers la quasi meme solution.
+		# pour eviter ca, on calcule le & d identite entre les regex, et sir le %
+		# on supprime celle avec le plus petit score
+		# Replace a subtree (modify a part/branch of the tree)
+		if R.random() <= self.mReS:
+			self.MUT_replace_subtree(R.choice(indv.rules), dico_cnt_mut)
+		
+		# mutation only with RMSE methods
+		if self.config["fitness_alg"] == "RMSE2":
+			# change weight of the rule
+			if R.random() <= self.mCW:
+				self.MUT_change_weight(R.choice(indv.rules), dico_cnt_mut)
+
+		# Add X new AA in a leaf node
+		if R.random() <= self.mAA:
+			self.MUT_add_alphabet(R.choice(indv.rules), dico_cnt_mut)
+
+		# Replace the value of one node (invert or replace)
+		if R.random() <= self.mRN:
+			self.MUT_replace_node(R.choice(indv.rules), dico_cnt_mut)
+
+
+		# A Fverifer
+
+		# remove from pattern
+		if R.random() <= self.mRFP:
+			# pick a random node (avoid None node and root)
+			self.MUT_remove_from_pattern(R.choice(indv.rules), dico_cnt_mut)
+
+
 
 
 	# Add a random rule mutation
-	def MUT_add_rule(self, individual):
+	def MUT_add_rule(self, individual, dico):
 		'''
-		Mutation operator. Add a new rule to the list of rules of an individual
+		Mutation operator. Add a new regex to the list of rules of an individual
 
 		individual: the target individual selected with a probability of *self.mAR*
 		'''
@@ -823,25 +1253,49 @@ class Optimizer:
 			elif self.init_method == 'half':
 				pattern_re, tree = regex.indi_half(self.depth_tree, self.min_braces, self.max_braces)
 
+
 			rule = Rule.Rule(pattern_re, weight, 0, tree)
 			individual.rules.append(rule)
-			self.counter_add_rule += 1
+
+			dico['cnt_add_rule'] += 1
 	
 	# Remove rule mutation
-	def MUT_remove_rule(self, individual):
+	def MUT_remove_rule(self, individual, dico):
 		'''
 		Mutation operator. Remove a rule to the list of rules of an individual
 
 		individual: the target individual selected with a probability of *self.mRR*
 		'''
 
-		if len(individual.rules) == 0:
+		if len(individual.rules) == 0 or len(individual.rules) == 1:
 			print("[ERROR] Optimizer.py (remove rule mutation) Not enough rules\n>>>")
 			exit()
 		else:
 			tempRand = R.randint(0, len(individual.rules) - 1)
 			del (individual.rules[tempRand])
-			self.counter_remove_rule +=1
+
+			dico['cnt_remove_rule'] += 1
+
+	# Replace a rule by another one
+	def MUT_replace_rule(self, individual, dico):
+		# initialize a random weight
+		weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
+
+		tempRand = R.randint(0, len(individual.rules) - 1)
+		del (individual.rules[tempRand])
+
+		# Create a new RE pattern
+		if self.init_method == 'full':
+			pattern_re, tree = regex.indi_full(self.depth_tree, self.min_braces, self.max_braces)
+		elif self.init_method == 'grow':
+			pattern_re, tree = regex.indi_grow(self.depth_tree, self.min_braces, self.max_braces)
+		elif self.init_method == 'half':
+			pattern_re, tree = regex.indi_half(self.depth_tree, self.min_braces, self.max_braces)
+
+		rule = Rule.Rule(pattern_re, weight, 0, tree)
+		individual.rules.append(rule)
+
+		dico['cnt_replace_rule'] += 1
 
 	# Change weight mutation
 	def MUT_change_weight(self, rule):
@@ -860,31 +1314,35 @@ class Optimizer:
 			rule.weight -= weightRand
 
 	# Replace patterns mutation (replace sub-tree)
-	def MUT_replace_subtree(self, rule):
+	def MUT_replace_subtree(self, rule, dico):
 		# Draw a random node
 		random_node = self.pick_a_node(rule.tree_shape)
 
 		# Define the layer of the random node
-		for key_layer, list_nodes in self.dict_layer.items():
+		for num_layer, list_nodes in self.dict_layer.items():
 			if random_node in list_nodes:
-				layer = key_layer
+				layer = num_layer
 
 		# Leaf case, node in the last layer
 		if layer == self.last_layer:
 			# Change the leaf and modify tree shape and pattern of the rule
 			# if the leaf is a list
 			if type(rule.tree_shape[random_node]) == list:
+
 				if ('^' in rule.tree_shape[random_node]): # [^] case
-					rule.tree_shape[random_node] = R.sample(regex.ALPHABET, R.randint(1, len(regex.ALPHABET)-1))
+					rule.tree_shape[random_node] = R.sample(regex.ALPHABET, R.randint( int(len(regex.ALPHABET)/2), len(regex.ALPHABET)-1))
 					rule.tree_shape[random_node].insert(0,'^')
+
 				else: # [] case
-					rule.tree_shape[random_node] = R.sample(regex.ALPHABET, R.randint(1, len(regex.ALPHABET)-1))
+					rule.tree_shape[random_node] = R.sample(regex.ALPHABET, R.randint(1, int(len(regex.ALPHABET)/2)+1 ))
+
 			# if the leaf is a single element
 			else:
 				rule.tree_shape[random_node] = R.choice(regex.LAST)
 
+		# Operator node case
 		else:
-			# Generate a new sub-tree
+			# Generate a new sub-tree according to a initialization method
 			tree_method = np.random.choice(['full', 'grow'], p=[0.5,0.5])
 
 			if tree_method == 'full':
@@ -894,7 +1352,8 @@ class Optimizer:
 
 			rule.tree_shape[random_node] = new_tree[0]
 	
-			child = [random_node]
+			# Create list of children of the random node
+			child = [random_node] 
 			i=0
 
 			# Add all nodes of the new subtree
@@ -913,145 +1372,12 @@ class Optimizer:
 
 		# New regex pattern
 		rule.pattern = regex.tree2regex(rule.tree_shape)
-		self.counter_replace_tree += 1
 
+		dico['cnt_replace_subtree'] += 1
 
-
-	# Change/invert one node
-	def MUT_ponctual_point(self, rule):
-
-		# pick a random node (avoid None node)
-		random_node = self.pick_a_node(rule.tree_shape)
-		
-		if rule.tree_shape[random_node] == 'cat':
-			rule.tree_shape[random_node] = '|'
-
-		elif rule.tree_shape[random_node] == '|':
-			rule.tree_shape[random_node] = 'cat'
-
-		elif rule.tree_shape[random_node] == '+':
-			rule.tree_shape[random_node] = '{' + str(R.randint(self.min_braces, self.max_braces)) + '}'
-		
-		elif '{' in rule.tree_shape[random_node]:
-			rule.tree_shape[random_node] = '{' + str(R.randint(self.min_braces, self.max_braces)) + '}'
-		
-		elif type(rule.tree_shape[random_node]) == list:
-			# if ('^' in rule.tree_shape[random_node]):
-			# 	rule.tree_shape[random_node] = R.sample(regex.ALPHABET, int(R.randint(len(regex.ALPHABET)/2), len(regex.ALPHABET)-1))
-			# 	rule.tree_shape[random_node].insert(0,'^')
-			# else:
-			# 	rule.tree_shape[random_node] = R.sample(regex.ALPHABET, R.randint(1, int(len(regex.ALPHABET)/2) )) 
-			pass
-		elif rule.tree_shape[random_node] == '[]':
-			try:
-				rule.tree_shape[random_node] = '[^]'
-				rule.tree_shape[(random_node*2) + 1].insert(0,'^')
-			except AttributeError:
-				print('[ERROR]')
-				print(rule.tree_shape,rule.tree_shape[random_node], random_node)
-				print(rule.pattern)
-
-		elif rule.tree_shape[random_node] == '[^]':
-			rule.tree_shape[random_node] = '[]'
-			if ('^' in rule.tree_shape[(random_node*2) + 1]):
-				rule.tree_shape[(random_node*2) + 1].remove('^')
-
-		elif rule.tree_shape[random_node] in regex.LAST:
-			rule.tree_shape[random_node] = R.choice(regex.LAST)
-
-		rule.pattern = regex.tree2regex(rule.tree_shape)
-
-
-	# Alter patterns mutation (remove letter)    ------> DONT WORK
-	def MUT_remove_from_pattern(self, rule):
-		copysave = copy.deepcopy(rule.tree_shape)
-		# print(">>> AVANT",rule.tree_shape)
-		# print(">>> AVANT",rule.pattern)
-		random_node = self.pick_a_node(rule.tree_shape)
-		# print('------------------------------------------------------')
-		# print('Noeud supprime', random_node, rule.tree_shape[random_node])
-		# self.deleteTree(random_node, rule)
-
-
-		# Define the layer of the random node
-		for key_layer, list_nodes in self.dict_layer.items():
-			if random_node in list_nodes:
-				layer = key_layer
-
-		# print('layer=',layer)
-		# Define last layer, and leaf nodes
-		# right_subtree =  self.create_subtree_list(1)
-		# left_subtree = self.create_subtree_list(2)
-		# right_leaf = 0
-		# left_leaf = 0
-
-		# for i in right_subtree:
-		# 	if rule.tree_shape[i] == None:
-		# 		pass
-		# 	else:
-		# 		right_leaf = i
-
-		# for i in left_subtree:
-		# 	if rule.tree_shape[i] == None:
-		# 		pass
-		# 	else:
-		# 		left_leaf = i
-
-		if layer == self.last_layer: # Never delete a leaf node
-			pass
-		# elif random_node == right_leaf: # Never delete a leaf node
-		# 	pass
-		# elif random_node == left_leaf: # Never delete a leaf node
-		# 	pass
-		else:
-			self.mutation_count+=1
-
-			# Define list of node in child subtree
-			child = self.create_subtree_list(random_node)
-			# print('j influence', child)
-
-			# Replace all child nodes by None value
-			for i, node_index in enumerate(child):
-				rule.tree_shape[node_index] = None
-
-			# Define parent and brother of the random node
-			parent = self.I_am_ur_parent(random_node)
-			brother = self.I_am_ur_brother(random_node)
-
-			# print('parent',parent, rule.tree_shape[parent])
-			# print('brother',brother, rule.tree_shape[brother])
-
-			# Define list of node in brother and parent subtree
-			brother_tree = self.create_subtree_list(brother)
-			parent_tree = self.create_subtree_list(parent)
-			# print('parent_tree',parent_tree )
-			# print('brother_tree',brother_tree)
-
-			# Replace parent nodes by brother nodes
-			for i, j in enumerate(parent_tree):
-				try:
-					rule.tree_shape[parent_tree[i]] = rule.tree_shape[brother_tree[i]]
-				except IndexError:
-					rule.tree_shape[parent_tree[i]] = None
-
-		
-		# Checkpoint
-		if rule.tree_shape[0] != 'cat' and rule.tree_shape[0] != '|':
-			rule.tree_shape[1] = rule.tree_shape[0]
-			rule.tree_shape[0] = 'cat'
-
-		try:
-			rule.pattern = regex.tree2regex(rule.tree_shape)
-		except:
-			# Error of compilation, tree shape is erroneous. remove changing
-			rule.tree_shape = copysave
-			rule.pattern = regex.tree2regex(rule.tree_shape)
-
-
-		
 
 	# Add some new AA in leaf node /!\ dont respect tree shape
-	def MUT_add_alphabet(self, rule, random_node):
+	def MUT_add_alphabet(self, rule, dico):
 		'''
 		Add 1 to 4 new AA in a leaf node. Ex:
 		Initial: (H{4}|(P+))|(O+)
@@ -1063,6 +1389,9 @@ class Optimizer:
 		random_node: the node impacted by the mutation, randomly selected
 		'''
 
+		# Draw a random node
+		random_node = self.pick_a_node(rule.tree_shape)
+
 		# Define the layer of the random node
 		for key_layer, list_nodes in self.dict_layer.items():
 			if random_node in list_nodes:
@@ -1070,7 +1399,6 @@ class Optimizer:
 
 		if layer == self.last_layer: # Modify only leaf node (no list)
 			if type(rule.tree_shape[random_node]) != list:
-				
 				nbr_new_aa = R.randint(1, 4) # Number of AA to add
 
 				for i in range(nbr_new_aa):
@@ -1079,7 +1407,197 @@ class Optimizer:
 
 				# Aply modification on the pattern of the rule
 				rule.pattern = regex.tree2regex(rule.tree_shape)
+		dico['cnt_add_aa'] += 1
 
+	# Change/invert one node
+	def MUT_replace_node(self, rule, dico):
+
+
+		# pick a random node (avoid None node)
+		random_node = self.pick_a_node(rule.tree_shape)
+		
+		if rule.tree_shape[random_node] == 'cat':
+			rule.tree_shape[random_node] = '|'
+
+		elif rule.tree_shape[random_node] == '|':
+			rule.tree_shape[random_node] = 'cat'
+		
+		elif '{' in rule.tree_shape[random_node]:
+			rule.tree_shape[random_node] = '{' + str(R.randint(self.min_braces, self.max_braces)) + '}'
+
+		elif rule.tree_shape[random_node] == '[]':
+			try:
+				rule.tree_shape[random_node] = '[^]'
+				rule.tree_shape[(random_node*2) + 1].insert(0,'^')
+				
+			except AttributeError:
+				print('[WARNING] optimizer.py - mutation replace_node doesn\'t find the child of [^]')
+				print(rule.tree_shape,rule.tree_shape[random_node], random_node)
+				print(rule.pattern)
+				pass
+
+		elif rule.tree_shape[random_node] == '[^]':
+			rule.tree_shape[random_node] = '[]'
+			if ('^' in rule.tree_shape[(random_node*2) + 1]):
+				rule.tree_shape[(random_node*2) + 1].remove('^')
+		else:
+			pass
+
+		rule.pattern = regex.tree2regex(rule.tree_shape)
+		dico['cnt_replace_node'] += 1
+
+	# Alter patterns mutation (remove letter)    ------> DONT WORK
+	def MUT_remove_from_pattern(self, rule, dico):
+		copysave = copy.deepcopy(rule.tree_shape)
+
+
+
+		# print("\n\n>>> AVANT",rule.tree_shape)
+		# print(">>> AVANT",rule.pattern)
+		random_node = self.pick_a_node(rule.tree_shape)
+		# print('------------------------------------------------------')
+		# print('Noeud supprime', random_node, rule.tree_shape[random_node])
+		# self.deleteTree(random_node, rule)
+
+
+
+		# Define the layer of the random node
+		for key_layer, list_nodes in self.dict_layer.items():
+			if random_node in list_nodes:
+				layer = key_layer
+
+		brother = self.I_am_ur_brother(random_node)
+		child = self.create_subtree_list(random_node)
+		parent = self.I_am_ur_parent(random_node)
+
+
+		# print('frere', brother)
+		# print('enfant', child)
+		# print('parent', parent, rule.tree_shape[parent])
+		# rule.tree_shape[random_node] = None
+
+		try:
+			if '[' in rule.tree_shape[random_node]:
+	
+				# rule.tree_shape[random_node] = None
+				rule.tree_shape[parent] = 'cat'
+	
+			for i in child:
+				rule.tree_shape[i] = None
+	
+	
+	
+			if rule.tree_shape[parent] == '|':
+				rule.tree_shape[parent] = 'cat'
+			if rule.tree_shape[parent] == '+':
+				rule.tree_shape[parent] = None
+	
+			if '{' in rule.tree_shape[parent]:
+				rule.tree_shape[parent] = None
+				x = self.I_am_ur_parent(parent)
+				if rule.tree_shape[x] == '|':
+					rule.tree_shape[x] = 'cat'
+	
+			if rule.tree_shape[parent] == '[^]':
+				rule.tree_shape[parent] = None
+			if rule.tree_shape[parent] == '[]':
+				rule.tree_shape[parent] = None
+		except:
+			rule.tree_shape = copysave
+			rule.pattern = regex.tree2regex(rule.tree_shape)
+
+
+
+		rule.pattern = regex.tree2regex(rule.tree_shape)
+
+		if '(|' in rule.pattern or '|)' in rule.pattern:
+			rule.tree_shape = copysave
+			rule.pattern = regex.tree2regex(rule.tree_shape)
+		else:
+			dico['cnt_remove_subtree'] += 1
+
+
+
+
+
+
+
+
+
+
+
+
+		# # Define last layer, and leaf nodes
+		# # right_subtree =  self.create_subtree_list(1)
+		# # left_subtree = self.create_subtree_list(2)
+		# # right_leaf = 0
+		# # left_leaf = 0
+
+		# # for i in right_subtree:
+		# # 	if rule.tree_shape[i] == None:
+		# # 		pass
+		# # 	else:
+		# # 		right_leaf = i
+
+		# # for i in left_subtree:
+		# # 	if rule.tree_shape[i] == None:
+		# # 		pass
+		# # 	else:
+		# # 		left_leaf = i
+
+		# if layer == self.last_layer: # Never delete a leaf node
+		# 	pass
+		# # elif random_node == right_leaf: # Never delete a leaf node
+		# # 	pass
+		# # elif random_node == left_leaf: # Never delete a leaf node
+		# # 	pass
+		# else:
+
+		# 	# Define list of node in child subtree
+		# 	child = self.create_subtree_list(random_node)
+		# 	# print('j influence', child)
+
+		# 	# Replace all child nodes by None value
+		# 	for i, node_index in enumerate(child):
+		# 		rule.tree_shape[node_index] = None
+
+		# 	# Define parent and brother of the random node
+		# 	parent = self.I_am_ur_parent(random_node)
+		# 	brother = self.I_am_ur_brother(random_node)
+
+		# 	# print('parent',parent, rule.tree_shape[parent])
+		# 	# print('brother',brother, rule.tree_shape[brother])
+
+		# 	# Define list of node in brother and parent subtree
+		# 	brother_tree = self.create_subtree_list(brother)
+		# 	parent_tree = self.create_subtree_list(parent)
+		# 	# print('parent_tree',parent_tree )
+		# 	# print('brother_tree',brother_tree)
+
+		# 	# Replace parent nodes by brother nodes
+		# 	for i, j in enumerate(parent_tree):
+		# 		try:
+		# 			rule.tree_shape[parent_tree[i]] = rule.tree_shape[brother_tree[i]]
+		# 		except IndexError:
+		# 			rule.tree_shape[parent_tree[i]] = None
+
+		
+		# # Checkpoint
+		# if rule.tree_shape[0] != 'cat' and rule.tree_shape[0] != '|':
+		# 	rule.tree_shape[1] = rule.tree_shape[0]
+		# 	rule.tree_shape[0] = 'cat'
+
+		# try:
+		# 	rule.pattern = regex.tree2regex(rule.tree_shape)
+		# except:
+		# 	# Error of compilation, tree shape is erroneous. remove changing
+		# 	rule.tree_shape = copysave
+		# 	rule.pattern = regex.tree2regex(rule.tree_shape)
+
+
+		
+
+	
 
 		
 

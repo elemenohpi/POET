@@ -274,6 +274,3 @@ def plot_motif_occurence(motif_size, alphabet):
 	return MOTIF_BANK
 
 
-d=occ_motif_bank(4, 'Zappo')
-print(d)
-

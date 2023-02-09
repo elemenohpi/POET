@@ -7,15 +7,19 @@ import random
 import numpy as np
 import csv
 import re
+import eletility
 
-ALPHABET_FILE = "Zappo"
+configparser = eletility.ConfigParser()
+config = configparser.read("config.ini")
+
+ALPHABET_FILE = config["learn_data"]
 
 ### CONSTANTES ###
 
 # TODO: {m,n} implementer ca ?
 
 # OPCODE = { 'A':0, 'C':0, 'G':0, 'T':0, '.':0,
-# 		   '[':1, '{':1, '+':1, '^':1, # '*':1, '?':1
+# 		   '[':1, '{':1, '+':1, '^':1, # '*':1,  '?':1
 # 		   '|':2, 'cat':2 }
 
 # ALPHABET = ["A", "C", "G", "T"]
@@ -284,7 +288,7 @@ class Full:
 
 		if self.tree[i] == '[':
 			self.tree[i] = '[]'
-			self.tree[(i*2) + 1] = random.sample(ALPHABET, random.randint(1, MAX_IN_SQUARE)) # child1=List
+			self.tree[(i*2) + 1] = random.sample(ALPHABET, random.randint(1, MAX_IN_SQUARE+1)) # child1=List
 			self.tree[(i*2) + 2] = None # self.add_extra_leaf(extra) # or None
 
 		elif self.tree[i] == '^':
@@ -552,6 +556,5 @@ class Grow:
 
 		return self.tree
 
-	# PROBLEME DANS LA CONSTRUCTION DES INDI GROW, AVEC LE + et LES {}
 	
 # test()
