@@ -22,3 +22,4 @@ __pycache__/pop.cpython-310.pyc
 __pycache__/predictor.cpython-310.pyc
 __pycache__/rule.cpython-310.pyc
 *.pyc
+*.pyc
