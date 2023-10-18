@@ -2,6 +2,8 @@ import argparse
 # from os import listdir
 # from os.path import isfile, join
 
+import archivist as archivist
+# import pandas as pd
 # import pandas as pd
 import pop as population
 import optimizer as optimizer
@@ -12,8 +14,6 @@ import fitness as F
 import os.path
 import random as rand
 from subprocess import call
-import archivist as archivist
-# import pandas as pd
 import eletility
 from datetime import date
 
