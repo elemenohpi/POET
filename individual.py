@@ -12,6 +12,7 @@ class Individual:
 		self.usedRules = {}
 		self.usedRulesCount = 0
 		self.ruleSize = int(config["maximum_rule_size"])
+		self.minSize = int(config["minimum_rule_size"])
 		self.maxRuleCount = int(config["maximum_rule_count"])
 		self.minWeight = float(config["rule_weight_min"])
 		self.maxWeight = float(config["rule_weight_max"])
@@ -29,7 +30,7 @@ class Individual:
 
 
 	def makeFromFile(self, file):
-		# print ("Creating an Individual from file...")
+		print ("Creating an Individual from file...")
 		self.rules = []
 		self.usedRules = {}
 		self.fitness = 0
@@ -57,7 +58,7 @@ class Individual:
 			pattern = ""
 			weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
 			# Add these many rules
-			for j in range(R.randint(1, self.ruleSize)):
+			for j in range(R.randint(self.minSize, self.ruleSize)):
 				# Rule size is calculated randomly, and now we need to select a random combination of codes with a specified size
 				randomchar = codes[R.randint(0, (len(codes) - 1))]
 				pattern += randomchar

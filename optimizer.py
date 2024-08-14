@@ -22,6 +22,7 @@ class Optimizer:
 		self.logInterval = int(config["pop_log_interval"])
 		self.crossRate = float(config["crossover_unused_selection_chance"])
 		self.ruleSize = int(config["maximum_rule_size"])
+		self.minSize = int(config["minimum_rule_size"])
 		self.ruleCount = int(config["maximum_rule_count"])
 		self.minWeight = float(config["rule_weight_min"])
 		self.maxWeight = float(config["rule_weight_max"])
@@ -219,7 +220,7 @@ class Optimizer:
 					if R.random() <= self.mRFP:
 						# remove from pattern
 						self.mut_remove_from_pattern(rule)
-						if rule.pattern == "":
+						if len(rule.pattern) <= self.minSize:
 							indv.rules.remove(rule)
 				indv.bubbleSort()
 
@@ -291,7 +292,7 @@ class Optimizer:
 		pattern = ""
 		weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
 		# Add these many rules
-		for i in range(R.randint(1, self.ruleSize)):
+		for i in range(R.randint(self.minSize, self.ruleSize)):
 			# Rule size is calculated randomly, and now we need to select a random combination of codes with a
 			# specified size
 			randomchar = self.codes[R.randint(0, (len(self.codes) - 1))]
@@ -335,10 +336,7 @@ class Optimizer:
 
 	# Alter patterns mutation (remove letter)
 	def mut_remove_from_pattern(self, rule):
-		if len(rule.pattern) == 0:
-			return
-		if len(rule.pattern) == 1:
-			rule.pattern = ""
+		if len(rule.pattern) <= self.minSize:
 			return
 		pattern = rule.pattern
 		insPos = R.randint(0, len(pattern) - 1)

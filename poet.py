@@ -343,7 +343,7 @@ def hpcc():
         file.write("\n########## Command Lines to Run ##########\n\n")
         file.write("module pandas\n")
         # file.write("module load GCC/6.4.0-2.28 OpenMPI  ### load necessary modules, e.g\n")
-        file.write("cd ~/POET\n")
+        file.write("cd /mnt/home/kocherov/Documents/poet/POET\n")
         log_file_path = logs_directory + "/evo_{}.csv".format(i)
         model_file_path = models_directory + "/model_{}.csv".format(i)
         file.write(
