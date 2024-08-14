@@ -3,10 +3,11 @@
 import rule as Rule
 import random as R
 import pandas as pd
+import numpy as np
 
 
 class Individual:
-	# Constructor 
+	# Constructor
 	def __init__(self, config):
 		self.rules = []
 		self.usedRules = {}
@@ -48,6 +49,9 @@ class Individual:
 			# print (str(i) + " " + str(tmpPatterns[i]) + " " + str(tmpWeights[i]))
 			rule = Rule.Rule(tmpPatterns[i], tmpWeights[i], tmpStatus[i])
 			self.rules.append(rule)
+		if len(self.rules) > self.maxRuleCount:
+			rule_idx = np.random.choice(range(0, self.maxRuleCount), self.maxRuleCount, replace=False)
+			self.rules = [self.rules[i] for i in rule_idx]
 		pass
 
 	def init_pattern(self):

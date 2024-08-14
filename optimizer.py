@@ -14,7 +14,7 @@ from datetime import datetime
 
 
 class Optimizer:
-	def __init__(self, config, population):
+	def __init__(self, config, population,):
 		self.config = config
 		self.P = population
 		self.runs = int(config["runs"])
@@ -356,5 +356,5 @@ class Optimizer:
 						indv.rules.remove(indv.rules[k])
 						k -= 1
 					break
-# for i in removeList:
+				# for i in removeList:
 # 	indv.rules.remove(i)

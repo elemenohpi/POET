@@ -36,6 +36,8 @@ def add_arguments_to_parser(parser):
     parser.add_argument('-al', nargs='*', help="Computes the average length of all given models")
     #
     parser.add_argument('-learn', help='Path to the learn data (format: csv)')
+    parser.add_argument('-rules', help='Path to rules to seed the model with, half of individuals will start with these'
+                                       ' rules')
     # parser.add_argument('-translation',
     #                     help='Path to the translation table (format: csv, default: )')
     # parser.add_argument('-pop',
@@ -76,6 +78,9 @@ def manage_input(args):
 
     if args.learn:
         config["learn_data"] = args.learn
+
+    if args.rules:
+        config["rule_set"] = args.rules
 
     # get the fitness of a given model
     if args.f:
