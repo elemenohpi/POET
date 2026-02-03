@@ -24,3 +24,4 @@ __pycache__/rule.cpython-310.pyc
 *.pyc
 *.pyc
 *.pyc
+.vscode/coding-times.db
