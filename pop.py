@@ -22,14 +22,14 @@ class Population:
             indv = Individual.Individual(self.config)
             init_method(indv)
             self.pop.append(indv)
-
-        if self.config['rules'] is None:
+        rules = self.config.get('rules', None)
+        if rules is None:
             for _ in range(self.size):
                 create_and_append_individual(lambda indv: indv.init_pattern())
         else:
             half_size = int(self.size / 2)
             for _ in range(half_size):
-                create_and_append_individual(lambda indv: indv.makeFromFile(self.config['rules']))
+                create_and_append_individual(lambda indv: indv.makeFromFile(rules))
             for _ in range(self.size - half_size):
                 create_and_append_individual(lambda indv: indv.init_pattern())
 
