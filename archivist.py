@@ -1,56 +1,21 @@
 import os
 import pandas as pd
-import datetime
-import shutil
-import sys
 import eletility
 
+
 class Archivist:
-	def __init__(self, config):
-		self.config = config
-		pass
+    def __init__(self, config):
+        self.config = config
 
-	def saveCSV(self, df, path, filename):
-		try:
-			if not os.path.exists(path):
-				os.makedirs(path)
-			if os.path.exists(path + "/" + filename + ".csv"):
-				os.remove(path + "/" + filename + ".csv")
-		except:
-			print("P-Predictor: Could not initialize the folders correctly")
-		try:
-			df.to_csv(path + "/" + filename + ".csv")
-		except:
-			print("P-Predictor: Could not save the file: " + path + "/" + filename + ".csv")
+    def saveEvo(self, string):
+        with open(self.config["output_evo"], "a") as f:
+            f.write("{}\n".format(string))
 
-	def save(self, filename, string):
-		file = open(filename, "a")
+    def saveModel(self, df):
+        path = self.config["output_model"]
+        df.to_csv(path)
 
-		file.write(string + "\n")
-
-		file.close()
-
-	def saveEvo(self, string):
-		path = self.config["output_evo"]
-		file = open(path, "a")
-		file.write("{}\n".format(string))
-		file.close()
-
-	def saveModel(self, df):
-		path = self.config["output_model"]
-		df.to_csv(path)
-
-	def setup(self, archive=False):
-		# Ensure the appropriate directories exist. Remove any existing log file and archive them using appropriate time/date
-		outputDir = "./output"
-		archiveDir = "./archive"
-
-		# Check if everything is in place
-
-		if not os.path.exists(outputDir):
-			os.makedirs(outputDir)
-		if not os.path.exists(archiveDir):
-			os.makedirs(archiveDir)
-
-		F = eletility.Files()
-		F.writeTruncate(self.config["output_evo"], "")
+    def setup(self, archive=False):
+        os.makedirs("./output", exist_ok=True)
+        os.makedirs("./archive", exist_ok=True)
+        eletility.Files().writeTruncate(self.config["output_evo"], "")

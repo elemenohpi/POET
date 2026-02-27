@@ -62,7 +62,9 @@ class DB:
                             break
                     if not found_flag:
                         # update the table
-                        command = "ALTER TABLE {} ADD {} {}".format(table, bp_column, conf[bp_column])
+                        command = "ALTER TABLE {} ADD {} {}".format(
+                            table, bp_column, conf[bp_column]
+                        )
                         self.cursor.execute(command)
 
                 table_info = self.tableInfo(table)
@@ -71,12 +73,14 @@ class DB:
                     db_column = db_column_info[1]
 
                     if not db_column in conf.keys():
-                        command = "ALTER TABLE {} DROP COLUMN {}".format(table, db_column)
+                        command = "ALTER TABLE {} DROP COLUMN {}".format(
+                            table, db_column
+                        )
                         self.cursor.execute(command)
 
                 # table_info = self.tableInfo(table)
                 # print("table_info", table_info)
-                # if not column_key in 
+                # if not column_key in
                 # if column[1] != list(conf.keys())[index]
 
                 # exit()
@@ -95,7 +99,7 @@ class DB:
     #     content += "DB = ele.DB()\n"
     #     content += "DB.connect('{}')\n\n".format(db_name)
 
-    #     libfile = (db_name + "_lib.py")    
+    #     libfile = (db_name + "_lib.py")
     #     F.truncate(libfile)
 
     #     tables = self.tables()
@@ -121,10 +125,10 @@ class DB:
     #     pass
 
     def tableInfo(self, table):
-        return self.conn.execute('PRAGMA TABLE_INFO({})'.format(table)).fetchall()
+        return self.conn.execute("PRAGMA TABLE_INFO({})".format(table)).fetchall()
 
     def connect(self, db_file):
-        """ connects to or creates a database connection to a SQLite database """
+        """connects to or creates a database connection to a SQLite database"""
         conn = None
         try:
             conn = sqlite3.connect(db_file)
@@ -136,12 +140,12 @@ class DB:
         return True
 
     def tables(self):
-        """ returns a list containing all the table names """
+        """returns a list containing all the table names"""
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         return self.cursor.fetchall()
 
     def tableExists(self, key):
-        """ returns true if the given table name exists"""
+        """returns true if the given table name exists"""
         tables = self.tables()
         for name in tables:
             if name[0] == key:
@@ -149,31 +153,32 @@ class DB:
         return False
 
     def createTable(self, name, conf):
-        """ creates a table """
+        """creates a table"""
         cmd = "CREATE TABLE IF NOT EXISTS {}(".format(name)
         for key, value in conf.items():
             cmd += "{} {}, ".format(key, value)
-        cmd = cmd[:len(cmd) - 2]
+        cmd = cmd[: len(cmd) - 2]
         cmd += ")"
         self.cursor.execute(cmd)
         self.conn.commit()
 
     def insertUnique(self, table, values, condition=True):
-        """ inserts a row to a table if a condition is met """
+        """inserts a row to a table if a condition is met"""
         keys = "("
         vals = ""
         for key in values:
             vals += "'{}', ".format(values[key])
             keys += "{}, ".format(key)
-        vals = vals[:len(vals) - 2] + ""
-        keys = keys[:len(keys) - 2] + ")"
-        cmd = "INSERT INTO {0} {1} SELECT {2} WHERE NOT EXISTS (SELECT 1 FROM {0} WHERE {3})".format(table, keys, vals,
-                                                                                                     condition)
+        vals = vals[: len(vals) - 2] + ""
+        keys = keys[: len(keys) - 2] + ")"
+        cmd = "INSERT INTO {0} {1} SELECT {2} WHERE NOT EXISTS (SELECT 1 FROM {0} WHERE {3})".format(
+            table, keys, vals, condition
+        )
         self.cursor.execute(cmd)
         self.conn.commit()
 
     def insertUniqueCol(self, table: str, col: str, values: list):
-        """ inserts a row to a table if a single condition is met """
+        """inserts a row to a table if a single condition is met"""
         uniqueVal = None
         keys = "("
         vals = "("
@@ -182,28 +187,28 @@ class DB:
                 uniqueVal = values[key]
             vals += "'{}', ".format(values[key])
             keys += "{}, ".format(key)
-        vals = vals[:len(vals) - 2] + ")"
-        keys = keys[:len(keys) - 2] + ")"
-        cmd = "INSERT INTO {0} {1} SELECT {2} WHERE NOT EXISTS (SELECT 1 FROM {0} WHERE {3}='{4}')".format(table, keys,
-                                                                                                           vals, col,
-                                                                                                           uniqueVal)
+        vals = vals[: len(vals) - 2] + ")"
+        keys = keys[: len(keys) - 2] + ")"
+        cmd = "INSERT INTO {0} {1} SELECT {2} WHERE NOT EXISTS (SELECT 1 FROM {0} WHERE {3}='{4}')".format(
+            table, keys, vals, col, uniqueVal
+        )
         self.cursor.execute(cmd)
         self.conn.commit()
 
     def selectOne(self, table, condition="TRUE"):
-        """ returns one rows of a given table which meets a given condition """
+        """returns one rows of a given table which meets a given condition"""
         cmd = "SELECT 1 from {0} WHERE {1}".format(table, condition)
         self.cursor.execute(cmd)
         return self.cursor.fetchone()
 
     def selectAll(self, table, condition="TRUE"):
-        """ returns all the rows of a given table which meet a given condition """
+        """returns all the rows of a given table which meet a given condition"""
         cmd = "SELECT * from {0} WHERE {1}".format(table, condition)
         self.cursor.execute(cmd)
         return self.cursor.fetchall()
 
     def rowExists(self, table, condition="TRUE"):
-        """ determines if a row exits in a table with a given condition """
+        """determines if a row exits in a table with a given condition"""
         cmd = "SELECT * from {0} WHERE {1}".format(table, condition)
         self.cursor.execute(cmd)
         if len(self.cursor.fetchall()) < 1:
@@ -211,31 +216,31 @@ class DB:
         return True
 
     def insert(self, table, values):
-        """ inserts a row to a table """
+        """inserts a row to a table"""
         keys = "("
         vals = "("
         for key in values:
             vals += "'{}', ".format(values[key])
             keys += "{}, ".format(key)
-        vals = vals[:len(vals) - 2] + ")"
-        keys = keys[:len(keys) - 2] + ")"
+        vals = vals[: len(vals) - 2] + ")"
+        keys = keys[: len(keys) - 2] + ")"
         cmd = "INSERT INTO {} {} VALUES {}".format(table, keys, vals)
         self.cursor.execute(cmd)
         self.conn.commit()
 
     def update(self, table, values, condition):
-        """ inserts a row to a table """
+        """inserts a row to a table"""
         keyval = ""
         for key in values:
             keyval += "{} = '{}',".format(key, values[key])
-        keyval = keyval[:len(keyval) - 1]
+        keyval = keyval[: len(keyval) - 1]
         cmd = "UPDATE {} SET {} WHERE {}".format(table, keyval, condition)
 
         self.cursor.execute(cmd)
         self.conn.commit()
 
     def delete(self, table, condition):
-        """ deletes row(s) from a given table which meet a given condition """
+        """deletes row(s) from a given table which meet a given condition"""
         cmd = "DELETE FROM {} WHERE {}".format(table, condition)
         self.cursor.execute(cmd)
         self.conn.commit()
@@ -243,16 +248,18 @@ class DB:
 
 ######################## PATHHELPER ########################
 
+
 class PathHelper:
     def __init__(self):
         pass
 
     def absPath(self, file):
-        """ returns the absolute path to a given relative path """
+        """returns the absolute path to a given relative path"""
         return os.path.abspath(file)
 
 
 ######################## VALIDATOR ########################
+
 
 class Validator:
     def __init__(self):
@@ -300,6 +307,7 @@ class Validator:
 
 ######################## STRINGPROC ########################
 
+
 class StringProc:
     pass
 
@@ -314,12 +322,13 @@ class StringProc:
 
 ########################## FILES ##########################
 
+
 class Files:
     def __init__(self):
         pass
 
     def truncate(self, file, create=True):
-        """ truncates a given file (creates a file if it doesn't exist) """
+        """truncates a given file (creates a file if it doesn't exist)"""
         try:
             f = open(file)
             f.truncate()
@@ -332,27 +341,28 @@ class Files:
         return 1
 
     def writeLine(self, file, str, create=True):
-        """ appends a line to a file """
+        """appends a line to a file"""
+        f = None
         try:
             f = open(file, "a")
             f.write(str)
             f.write("\n")
         except IOError:
             if create:
-                print("dd")
                 f = open(file, "w+")
-                print("ss")
                 f.write(str)
                 f.write("\n")
                 f.close()
                 return 1
             return 0
         finally:
-            f.close()
+            if f is not None:
+                f.close()
         return 1
 
     def write(self, file, str, create=True):
-        """ writes into a file (doesn't end the line)"""
+        """writes into a file (doesn't end the line)"""
+        f = None
         try:
             f = open(file, "a")
             f.write(str)
@@ -364,16 +374,18 @@ class Files:
                 return 1
             return 0
         finally:
-            f.close()
+            if f is not None:
+                f.close()
         return 1
 
     def writeTruncate(self, file, str, create=True):
-        """ truncates a file and writes into it """
+        """truncates a file and writes into it"""
         self.truncate(file, create)
         self.write(file, str)
 
     def lbreak(self, file, create=False):
-        """ appends a line break to a file """
+        """appends a line break to a file"""
+        f = None
         try:
             f = open(file, "a")
             f.write("\n")
@@ -385,20 +397,21 @@ class Files:
                 return 1
             return 0
         finally:
-            f.close()
+            if f is not None:
+                f.close()
         return 1
-        pass
 
 
 ########################## Times ##########################
 
+
 class Times:
     def __init__(self):
-        """ Date time helper functions"""
+        """Date time helper functions"""
         pass
 
     def monthS2N(self, month):
-        """ converts a month string to its corresponding numberical value """
+        """converts a month string to its corresponding numberical value"""
         month = month.lower()
         if month == "jan" or month == "january":
             return "01"
@@ -425,7 +438,7 @@ class Times:
         elif month == "dec" or month == "december":
             return "12"
         else:
-            raise "invalid month"
+            raise ValueError("invalid month")
 
     def now(self):
         now = datetime.datetime.now().time()
@@ -442,8 +455,9 @@ class Times:
 
 ########################## ConfigParser ##########################
 
+
 class ConfigParser:
-    """ Config parser constructor """
+    """Config parser constructor"""
 
     def __init__(self):
         pass
@@ -453,7 +467,7 @@ class ConfigParser:
     def read(self, path):
         config = {}
         try:
-            file = open(path, 'r')
+            file = open(path, "r")
         except IOError as e:
             raise Exception(e.strerror)
 
@@ -471,7 +485,7 @@ class ConfigParser:
                 tokens = line.split("=", 1)
                 if len(tokens) < 2:
                     # illegal length
-                    msg = "Illegal format on line " + str(num+1) + " of " + file.name
+                    msg = "Illegal format on line " + str(num + 1) + " of " + file.name
                     raise Exception(msg)
                 else:
                     # legal format
@@ -482,19 +496,21 @@ class ConfigParser:
 
 ########################## Colors ##########################
 
+
 class Colors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    DEBUG = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    ERROR = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
+    HEADER = "\033[95m"
+    OKBLUE = "\033[94m"
+    DEBUG = "\033[96m"
+    OKGREEN = "\033[92m"
+    WARNING = "\033[93m"
+    ERROR = "\033[91m"
+    ENDC = "\033[0m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
 
 
 ########################## Log ##########################
+
 
 class Log:
     def __init__(self, level="info", prefix=None) -> None:
@@ -570,6 +586,7 @@ class Log:
 
 
 ########################## List ##########################
+
 
 class List:
     def __init__(self) -> None:

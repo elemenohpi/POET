@@ -7,6 +7,7 @@ import individual as I
 import copy
 import pandas as pd
 
+
 class Sequence:
     def __init__(self, pattern, fitness):
         self.pattern = pattern
@@ -50,14 +51,18 @@ class Predictor:
             "R": 0.81,
             "G": 0.01,
             "H": 0.96,
-            "K": 0.99
+            "K": 0.99,
         }
         pass
 
     def predict(self):
         random.seed(int(self.config["seed"]))
         objF = F.Fitness(self.config)
-        files = [f for f in os.listdir(self.model_path) if os.path.isfile(os.path.join(self.model_path, f))]
+        files = [
+            f
+            for f in os.listdir(self.model_path)
+            if os.path.isfile(os.path.join(self.model_path, f))
+        ]
         ensemble = []
         for model in files:
             if model.split(".")[-1] != "csv":
@@ -77,7 +82,7 @@ class Predictor:
         # for i in range(self.count):
         #     print(repr(i + 1) + ":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness, 2))
 
-        for iter_index in range(1, self.iterations+1):
+        for iter_index in range(1, self.iterations + 1):
             if iter_index % 1 == 0:
                 print("Iteration", iter_index, "complete")
             # self.sort()
@@ -141,8 +146,8 @@ class Predictor:
             #     print(seq.fitness)
             #     print(self.pop[myi].fitness, "should be updated")
             #     exit()
-                # for i in range(self.count):
-                #     print(repr(i + 1) + ":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness, 2))
+            # for i in range(self.count):
+            #     print(repr(i + 1) + ":\t", self.pop[i].pattern, "\t", round(self.pop[i].fitness, 2))
         self.sort()
         for i in range(10):
             print(self.pop[i].pattern, self.pop[i].fitness)
@@ -213,6 +218,7 @@ class Predictor:
                 # than the next element
                 if self.pop[j].fitness < self.pop[j + 1].fitness:
                     self.pop[j], self.pop[j + 1] = self.pop[j + 1], self.pop[j]
+
 
 # Restrict the amino acid search
 # impirical research

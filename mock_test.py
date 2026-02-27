@@ -3,16 +3,21 @@ import individual as I
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import eletility
 
 # 10 (learn8) and 35 (mock) and 31 (overall)
-model = "best_epoch_models\E8.csv"
-# model = "..\..\..\poetnewres\myfile\POET1\output\model\model_15.csv"
+model = "best_epoch_models/E8.csv"
+# model = "../../../poetnewres/myfile/POET1/output/model/model_15.csv"
 dataset = "data/mock.csv"
 
-Indv = I.Individual()
+# Load config so Individual and Fitness can be constructed
+_configparser = eletility.ConfigParser()
+_config = _configparser.read("config.ini")
+
+Indv = I.Individual(_config)
 Indv.makeFromFile(model)
 
-Evaluator = F.Fitness()
+Evaluator = F.Fitness(_config)
 
 df = pd.read_csv(dataset)
 df = df.sort_values("fitness")
@@ -26,7 +31,7 @@ for seq in df["sequence"]:
     couple = [seq, prediction]
     predictions.append(couple)
 
-prediction_df = pd.DataFrame (predictions, columns=["sequence", "prediction"])
+prediction_df = pd.DataFrame(predictions, columns=["sequence", "prediction"])
 prediction_df = prediction_df.sort_values("prediction")
 # print(prediction_df)
 # print(df)
@@ -38,9 +43,9 @@ actual_ranks = []
 score = 0
 print("Predicted Rank \t Actual Rank \t Sequence \t Error")
 for index, data in enumerate(prediction_df["sequence"]):
-    predicted_rank = str(index+1)
+    predicted_rank = str(index + 1)
     sequence = data
-    actual_rank = df[df["sequence"]==sequence].index.values[0] + 1
+    actual_rank = df[df["sequence"] == sequence].index.values[0] + 1
     predicted_ranks.append(int(predicted_rank))
     actual_ranks.append(actual_rank)
     if index < 10 and actual_rank <= 10:
@@ -56,7 +61,7 @@ act_series = pd.Series(actual_ranks)
 
 corr = pre_series.corr(act_series)
 
-print (corr)
+print(corr)
 
 # plt.style.use('fast')
 #
@@ -75,4 +80,3 @@ print (corr)
 # ax.bar(x, actual_ranks, width=1, edgecolor="white", linewidth=0.7, alpha=0.5)
 # plt.show()
 # # plt.savefig("./gen_evo/fig.png", dpi=300)
-
