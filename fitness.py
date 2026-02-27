@@ -109,12 +109,26 @@ class Fitness:
             sequence, actualFitness, individual, returnPrediction
         )
 
+    @staticmethod
+    def _match_gap(pattern, substr):
+        """Match *pattern* against *substr* treating '_' as a single-char wildcard.
+
+        Both strings must already be the same length.  Returns True when every
+        non-wildcard character in *pattern* equals the corresponding character
+        in *substr*.
+        """
+        for pc, sc in zip(pattern, substr):
+            if pc != "_" and pc != sc:
+                return False
+        return True
+
     def _eval_substring(
         self, sequence, actualFitness, individual, returnPrediction=False
     ):
         seq_len = len(sequence)
         measuredFitness = 0.0
         mode = self.mode
+        gaps_enabled = self.enable_gaps
 
         # Precompute rule info to avoid repeated work in the inner loop
         rule_data = []
@@ -122,16 +136,26 @@ class Fitness:
             p = rule.pattern
             if not isinstance(p, str) or len(p) == 0:
                 continue
-            rule_data.append((p, p[::-1], len(p), rule))
+            # Skip all-wildcard patterns – they match everything
+            # and provide no discriminative power.
+            if all(ch == "_" for ch in p):
+                continue
+            has_gap = gaps_enabled and "_" in p
+            rule_data.append((p, p[::-1], len(p), has_gap, rule))
 
         for pos in range(seq_len):
             remaining = seq_len - pos
-            for pattern, rev_pattern, plen, rule in rule_data:
+            for pattern, rev_pattern, plen, has_gap, rule in rule_data:
                 if plen > remaining:
                     continue
 
                 substr = sequence[pos : pos + plen]
-                if pattern == substr:
+
+                # Use fast exact comparison when there are no gaps
+                fwd_match = (
+                    self._match_gap(pattern, substr) if has_gap else pattern == substr
+                )
+                if fwd_match:
                     if rule.status == 0:
                         rule.status = 1
                         rule.match_direction = "forward"
@@ -148,7 +172,13 @@ class Fitness:
                             "Invalid pattern_mode: expected 0 (summation) or 1 (multiplication)"
                         )
                     break
-                elif rev_pattern == substr:
+
+                rev_match = (
+                    self._match_gap(rev_pattern, substr)
+                    if has_gap
+                    else rev_pattern == substr
+                )
+                if rev_match:
                     if rule.status == 0:
                         rule.status = 1
                         rule.match_direction = "reverse"

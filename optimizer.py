@@ -34,6 +34,9 @@ class Optimizer:
             # Substring-mode mutation rates
             self.mATP = float(config["mut_add_to_pattern"])
             self.mRFP = float(config["mut_remove_from_pattern"])
+            self.enable_gaps = config.get("enable_gaps", "True").strip().lower() == "true"
+            self.mIG = float(config.get("mut_insert_gap", "0.1")) if self.enable_gaps else 0.0
+            self.mRG = float(config.get("mut_remove_gap", "0.1")) if self.enable_gaps else 0.0
             codes = pd.read_csv("data/translation/amino_to_amino.csv")
             self.codes = codes["code"].tolist()
         elif self.matching_mode == "regex":
@@ -291,6 +294,10 @@ class Optimizer:
                     needs_sort = True
                     if rule.pattern == "":
                         indv.rules.remove(rule)
+                if R.random() <= self.mIG:
+                    self.mut_insert_gap(rule)
+                if R.random() <= self.mRG:
+                    self.mut_remove_gap(rule)
             if needs_sort:
                 indv.bubbleSort()
 
@@ -404,6 +411,33 @@ class Optimizer:
         insPos = R.randint(0, len(pattern) - 1)
         pattern = pattern[0:insPos] + pattern[insPos + 1 : (len(pattern))]
         rule.pattern = pattern
+
+    # Insert gap mutation – convert a random amino-acid position to '_'
+    def mut_insert_gap(self, rule):
+        """Convert one random non-gap character in the pattern to '_'.
+
+        Never converts the last remaining amino acid, to prevent
+        all-wildcard patterns that match everything.
+        """
+        if len(rule.pattern) == 0:
+            return
+        non_gap = [i for i, ch in enumerate(rule.pattern) if ch != "_"]
+        if len(non_gap) <= 1:
+            return  # keep at least one concrete amino acid
+        idx = R.choice(non_gap)
+        rule.pattern = rule.pattern[:idx] + "_" + rule.pattern[idx + 1 :]
+
+    # Remove gap mutation – convert a random '_' back to a random amino acid
+    def mut_remove_gap(self, rule):
+        """Replace one random '_' in the pattern with a random amino acid."""
+        if len(rule.pattern) == 0:
+            return
+        gap_positions = [i for i, ch in enumerate(rule.pattern) if ch == "_"]
+        if not gap_positions:
+            return  # no gaps to remove
+        idx = R.choice(gap_positions)
+        new_char = self.codes[R.randint(0, len(self.codes) - 1)]
+        rule.pattern = rule.pattern[:idx] + new_char + rule.pattern[idx + 1 :]
 
     # ── Regex-mode mutations ────────────────────────────────────────────────
 

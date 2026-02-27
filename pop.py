@@ -33,5 +33,6 @@ class Population:
             if self.matching_mode == "regex":
                 indv.init_regex_pattern(self.config)
             else:
-                indv.init_pattern()
+                enable_gaps = self.config.get("enable_gaps", "True").strip().lower() == "true"
+                indv.init_pattern(gap_chance=0.15 if enable_gaps else 0.0)
             self.pop.append(indv)

@@ -58,13 +58,31 @@ class Individual:
             rule = Rule.Rule(pattern, tmpWeights[i], tmpStatus[i])
             self.rules.append(rule)
 
-    def init_pattern(self):
+    def init_pattern(self, gap_chance=0.15):
+        """Initialize random substring rules.
+
+        *gap_chance* controls the probability that any one character position
+        in a newly created pattern is a gap ('_') instead of a concrete amino
+        acid.  Set to 0.0 to disable initial gaps entirely.
+        """
         codes = _get_codes()
         for i in range(R.randint(1, int(self.maxRuleCount / 3))):
             pattern = ""
             weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
-            for j in range(R.randint(1, self.ruleSize)):
-                pattern += codes[R.randint(0, len(codes) - 1)]
+            pat_len = R.randint(1, self.ruleSize)
+            for j in range(pat_len):
+                if R.random() < gap_chance:
+                    pattern += "_"
+                else:
+                    pattern += codes[R.randint(0, len(codes) - 1)]
+            # Ensure at least one concrete amino acid (no all-gap patterns)
+            if all(ch == "_" for ch in pattern):
+                idx = R.randint(0, len(pattern) - 1)
+                pattern = (
+                    pattern[:idx]
+                    + codes[R.randint(0, len(codes) - 1)]
+                    + pattern[idx + 1 :]
+                )
             rule = Rule.Rule(pattern, weight, 0)
             self.rules.append(rule)
         self.bubbleSort()
