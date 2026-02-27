@@ -1,5 +1,6 @@
 import math
 import os
+import re
 from typing import TYPE_CHECKING, Literal, Optional, cast, overload
 from concurrent.futures import ProcessPoolExecutor
 from scipy import stats
@@ -26,6 +27,7 @@ def _init_worker(worker_data):
     _worker_fitness.dataset_size = worker_data["dataset_size"]
     _worker_fitness.mode = worker_data["mode"]
     _worker_fitness.config = worker_data["config"]
+    _worker_fitness.matching_mode = worker_data["matching_mode"]
     _worker_fitness.k = 0
 
 
@@ -50,6 +52,7 @@ class Fitness:
         self.dataset_size = len(self.sequences)
 
         self.mode = int(config["pattern_mode"])
+        self.matching_mode = config.get("matching_mode", "substring")
         self.k = 0
 
         self._executor = None
@@ -98,6 +101,17 @@ class Fitness:
     ) -> tuple[float, float]: ...
 
     def eval(self, sequence, actualFitness, individual, returnPrediction=False):
+        if self.matching_mode == "regex":
+            return self._eval_regex(
+                sequence, actualFitness, individual, returnPrediction
+            )
+        return self._eval_substring(
+            sequence, actualFitness, individual, returnPrediction
+        )
+
+    def _eval_substring(
+        self, sequence, actualFitness, individual, returnPrediction=False
+    ):
         seq_len = len(sequence)
         measuredFitness = 0.0
         mode = self.mode
@@ -151,6 +165,45 @@ class Fitness:
                             "Invalid pattern_mode: expected 0 (summation) or 1 (multiplication)"
                         )
                     break
+
+        error = abs(measuredFitness - actualFitness)
+        if returnPrediction is True:
+            return error, measuredFitness
+        return error
+
+    def _eval_regex(self, sequence, actualFitness, individual, returnPrediction=False):
+        """Evaluate an individual against a sequence using regex matching."""
+        measuredFitness = 0.0
+        mode = self.mode
+
+        for rule in individual.rules:
+            p = rule.pattern
+            if not isinstance(p, str) or len(p) == 0:
+                continue
+
+            try:
+                compiled = re.compile(p)
+            except re.error:
+                continue
+
+            match_count = 0
+            for match in re.finditer(compiled, sequence):
+                match_count += 1
+
+            if match_count > 0:
+                if rule.status == 0:
+                    rule.status = 1
+                    rule.match_direction = "regex"
+                    individual.usedRulesCount += 1
+
+                if mode == 0:
+                    measuredFitness += rule.weight
+                elif mode == 1:
+                    measuredFitness *= rule.weight
+                else:
+                    raise ValueError(
+                        "Invalid pattern_mode: expected 0 (summation) or 1 (multiplication)"
+                    )
 
         error = abs(measuredFitness - actualFitness)
         if returnPrediction is True:
@@ -227,6 +280,7 @@ class Fitness:
             "dataset_size": self.dataset_size,
             "mode": self.mode,
             "config": self.config,
+            "matching_mode": self.matching_mode,
         }
 
     def start_workers(self, num_workers=None):

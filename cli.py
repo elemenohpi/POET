@@ -54,6 +54,25 @@ def build_parser():
         help="Number of parallel worker processes for fitness evaluation. "
         "0 = auto-detect CPU count (default), 1 = sequential.",
     )
+    parser.add_argument(
+        "--experiment",
+        nargs=2,
+        metavar=("CONFIG_A", "CONFIG_B"),
+        help="Compare two config files across multiple seeds. "
+        "Use with --replicates and --gens.",
+    )
+    parser.add_argument(
+        "--replicates",
+        type=int,
+        default=10,
+        help="Number of replicates (seeds) for experiment mode (default: 10).",
+    )
+    parser.add_argument(
+        "--gens",
+        type=int,
+        default=100,
+        help="Number of generations per replicate in experiment mode (default: 100).",
+    )
     return parser
 
 
@@ -73,6 +92,15 @@ def manage_input(args):
         config["learn_data"] = args.learn
 
     config["workers"] = str(args.workers)
+
+    if args.experiment:
+        from experiment import run_experiment
+
+        config_b = configparser.read(args.experiment[1])
+        # Re-read config_a in case -config pointed elsewhere
+        config_a = configparser.read(args.experiment[0])
+        run_experiment(config_a, config_b, args.replicates, args.gens, args.workers)
+        exit()
 
     if args.f:
         raise NotImplementedError("-f is not yet tested")

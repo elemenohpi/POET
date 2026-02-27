@@ -1,6 +1,9 @@
 import rule as Rule
 import random as R
+import re
 import pandas as pd
+
+import regex_tree
 
 _codes_cache = None
 
@@ -27,6 +30,7 @@ class Individual:
         self.fitness = 0
         self.test = 0
         self.extra = {}
+        self.matching_mode = config.get("matching_mode", "substring")
 
     def remove_unexpressed(self):
         self.rules = [rule for rule in self.rules if rule.status != 0]
@@ -65,11 +69,52 @@ class Individual:
             self.rules.append(rule)
         self.bubbleSort()
 
+    def init_regex_pattern(self, config):
+        """Initialize rules with tree-based regex patterns (regex mode)."""
+        depth = int(config.get("max_depth_tree", "4"))
+        min_braces = int(config.get("min_braces", "1"))
+        max_braces = int(config.get("max_braces", "3"))
+        init_method = config.get("init_method", "half")
+
+        for _ in range(R.randint(1, int(self.maxRuleCount / 4))):
+            weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
+
+            if init_method == "half":
+                pattern_re, tree = regex_tree.indi_half(depth, min_braces, max_braces)
+            elif init_method == "grow":
+                pattern_re, tree = regex_tree.indi_grow(depth, min_braces, max_braces)
+            elif init_method == "full":
+                pattern_re, tree = regex_tree.indi_full(depth, min_braces, max_braces)
+            else:
+                raise ValueError(
+                    "Invalid init_method '{}': expected grow, full, or half".format(
+                        init_method
+                    )
+                )
+
+            if pattern_re is not None and self._check_regex(pattern_re):
+                rule = Rule.Rule(pattern_re, weight, 0, tree_shape=tree)
+                if rule.tree_shape[0] not in ("cat", "|"):
+                    continue
+                self.rules.append(rule)
+        self.bubbleSort()
+
+    @staticmethod
+    def _check_regex(pattern):
+        """Validate that a pattern compiles as a regex."""
+        if pattern is None:
+            return False
+        try:
+            re.compile(pattern)
+            return True
+        except re.error:
+            return False
+
     # for i in self.rules:
     # 	print(str(i.pattern) + " => " + str(i.weight))
 
     def bubbleSort(self):
-        self.rules.sort(key=lambda r: len(r.pattern), reverse=True)
+        self.rules.sort(key=lambda r: len(r.pattern) if r.pattern else 0, reverse=True)
 
     def print(self):
         for kh, rule in enumerate(self.rules):
