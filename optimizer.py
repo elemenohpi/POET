@@ -6,6 +6,7 @@ import random as R
 import individual as I
 import rule as Rule
 import regex_tree
+import pattern_engine as PE
 
 
 class Optimizer:
@@ -30,15 +31,57 @@ class Optimizer:
         # Matching mode
         self.matching_mode = config.get("matching_mode", "substring")
 
+        # Gradient-based weight optimisation (replaces mut_change_weight)
+        self.optimize_weights = (
+            config.get("optimize_weights", "False").strip().lower() == "true"
+        )
+
         if self.matching_mode == "substring":
             # Substring-mode mutation rates
             self.mATP = float(config["mut_add_to_pattern"])
             self.mRFP = float(config["mut_remove_from_pattern"])
-            self.enable_gaps = config.get("enable_gaps", "True").strip().lower() == "true"
-            self.mIG = float(config.get("mut_insert_gap", "0.1")) if self.enable_gaps else 0.0
-            self.mRG = float(config.get("mut_remove_gap", "0.1")) if self.enable_gaps else 0.0
+            self.enable_gaps = (
+                config.get("enable_gaps", "True").strip().lower() == "true"
+            )
+            self.mIG = (
+                float(config.get("mut_insert_gap", "0.1")) if self.enable_gaps else 0.0
+            )
+            self.mRG = (
+                float(config.get("mut_remove_gap", "0.1")) if self.enable_gaps else 0.0
+            )
+            self.mCHC = float(config.get("mut_change_character", "0.1"))
             codes = pd.read_csv("data/translation/amino_to_amino.csv")
             self.codes = codes["code"].tolist()
+
+            # ── Experimental feature flags & mutation rates ──
+            _bool = lambda k, d="False": config.get(k, d).strip().lower() == "true"
+            self.exp_char_classes = _bool("exp_char_classes")
+            self.exp_variable_gaps = _bool("exp_variable_gaps")
+            self.exp_weighted_positions = _bool("exp_weighted_positions")
+            self.exp_composition = _bool("exp_composition")
+            self.exp_match_count = _bool("exp_match_count")
+            self.exp_circular = _bool("exp_circular")
+            self.mCC = (
+                float(config.get("mut_char_class", "0.1"))
+                if self.exp_char_classes
+                else 0.0
+            )
+            self.mVG = (
+                float(config.get("mut_variable_gap", "0.1"))
+                if self.exp_variable_gaps
+                else 0.0
+            )
+            self.mPW = (
+                float(config.get("mut_position_weight", "0.1"))
+                if self.exp_weighted_positions
+                else 0.0
+            )
+            self.mCOMP = (
+                float(config.get("mut_composition", "0.05"))
+                if self.exp_composition
+                else 0.0
+            )
+            self.max_variable_gap = int(config.get("max_variable_gap", "6"))
         elif self.matching_mode == "regex":
             # Regex-mode config and mutation rates
             self.depth_tree = int(config.get("max_depth_tree", "4"))
@@ -147,13 +190,35 @@ class Optimizer:
 
             # Save the best model
             data = []
-            for rule in bestIndividual.rules:
-                data.append(
-                    [rule.pattern, rule.weight, rule.status, rule.match_direction]
-                )
-            df = pd.DataFrame(
-                data, columns=["pattern", "weight", "status", "match_direction"]
+            use_exp_cols = self.matching_mode == "substring" and any(
+                [
+                    self.exp_char_classes,
+                    self.exp_variable_gaps,
+                    self.exp_weighted_positions,
+                    self.exp_composition,
+                    self.exp_match_count,
+                    self.exp_circular,
+                ]
             )
+            for rule in bestIndividual.rules:
+                row = [
+                    rule.pattern,
+                    rule.weight,
+                    rule.status,
+                    rule.match_direction,
+                ]
+                if use_exp_cols:
+                    pw_str = (
+                        "|".join(str(w) for w in rule.position_weights)
+                        if rule.position_weights
+                        else ""
+                    )
+                    row.extend([pw_str, rule.group_id, rule.group_op])
+                data.append(row)
+            columns = ["pattern", "weight", "status", "match_direction"]
+            if use_exp_cols:
+                columns.extend(["position_weights", "group_id", "group_op"])
+            df = pd.DataFrame(data, columns=columns)
             arch.saveModel(df)
 
             # Select Parents (Tournament Selection) and Crossover
@@ -228,6 +293,10 @@ class Optimizer:
             else:
                 self._mutate_regex(self.P.pop)
 
+            # Gradient-based weight optimisation (Lamarckian step – elite only)
+            if self.optimize_weights:
+                fitness.optimize_weights(self.P.pop[0], self.minWeight, self.maxWeight)
+
             zeroFitness, testData = fitness.measureTotal(self.P.pop[0])
 
             # Check if elite got worse
@@ -284,7 +353,7 @@ class Optimizer:
             if R.random() <= self.mRR:
                 self.mut_remove_rule(indv)
             for rule in indv.rules[:]:
-                if R.random() <= self.mCW:
+                if not self.optimize_weights and R.random() <= self.mCW:
                     self.mut_change_weight(rule)
                 if R.random() <= self.mATP:
                     self.mut_add_to_pattern(rule)
@@ -294,10 +363,25 @@ class Optimizer:
                     needs_sort = True
                     if rule.pattern == "":
                         indv.rules.remove(rule)
+                        continue
+                if R.random() <= self.mCHC:
+                    self.mut_change_character(rule)
                 if R.random() <= self.mIG:
                     self.mut_insert_gap(rule)
                 if R.random() <= self.mRG:
                     self.mut_remove_gap(rule)
+                # ── Experimental per-rule mutations ──
+                if R.random() <= self.mCC:
+                    self.mut_char_class(rule)
+                    needs_sort = True
+                if R.random() <= self.mVG:
+                    self.mut_variable_gap(rule)
+                    needs_sort = True
+                if R.random() <= self.mPW:
+                    self.mut_position_weight(rule)
+            # Experimental individual-level mutations
+            if R.random() <= self.mCOMP:
+                self.mut_composition(indv)
             if needs_sort:
                 indv.bubbleSort()
 
@@ -327,7 +411,7 @@ class Optimizer:
                     needs_sort = True
             # Change weight
             for rule in indv.rules[:]:
-                if R.random() <= self.mCW:
+                if not self.optimize_weights and R.random() <= self.mCW:
                     self.mut_change_weight(rule)
             # Add amino acids to a leaf node
             if R.random() <= self.mAA:
@@ -358,15 +442,29 @@ class Optimizer:
     def mut_add_rule(self, individual):
         if len(individual.rules) >= self.ruleCount:
             return
-        pattern = ""
         weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
-        # Add these many rules
-        for i in range(R.randint(1, self.ruleSize)):
-            # Rule size is calculated randomly, and now we need to select a random combination of codes with a
-            # specified size
-            randomchar = self.codes[R.randint(0, (len(self.codes) - 1))]
-            pattern += randomchar
-        rule = Rule.Rule(pattern, weight, 0)
+
+        if self.exp_char_classes or self.exp_variable_gaps:
+            # Element-aware rule creation
+            gap_ch = 0.10 if self.enable_gaps else 0.0
+            class_ch = 0.15 if self.exp_char_classes else 0.0
+            elements = []
+            for _ in range(R.randint(1, self.ruleSize)):
+                elements.append(PE.random_element(self.codes, gap_ch, class_ch))
+            # Ensure at least one concrete element
+            if PE.is_all_wildcard(elements):
+                elements[R.randint(0, len(elements) - 1)] = ("c", R.choice(self.codes))
+            pattern = PE.render_elements(elements)
+            rule = Rule.Rule(pattern, weight, 0)
+            if self.exp_weighted_positions and not PE.has_variable_length(elements):
+                rule.position_weights = [1.0] * len(elements)
+        else:
+            pattern = ""
+            for _ in range(R.randint(1, self.ruleSize)):
+                randomchar = self.codes[R.randint(0, len(self.codes) - 1)]
+                pattern += randomchar
+            rule = Rule.Rule(pattern, weight, 0)
+
         individual.rules.append(rule)
 
     # Remove rule mutation
@@ -375,6 +473,33 @@ class Optimizer:
             return
         tempRand = R.randint(0, len(individual.rules) - 1)
         del individual.rules[tempRand]
+
+    # Point mutation – change a single character in the pattern
+    def mut_change_character(self, rule):
+        """Replace one concrete position with a different amino acid."""
+        if not rule.pattern or len(rule.pattern) == 0:
+            return
+        if self.exp_char_classes or self.exp_variable_gaps:
+            self._mut_change_character_elements(rule)
+            return
+        # Raw-string path (no experimental features)
+        concrete = [i for i, ch in enumerate(rule.pattern) if ch != "_"]
+        if not concrete:
+            return
+        idx = R.choice(concrete)
+        new_char = self.codes[R.randint(0, len(self.codes) - 1)]
+        rule.pattern = rule.pattern[:idx] + new_char + rule.pattern[idx + 1 :]
+
+    def _mut_change_character_elements(self, rule):
+        """Element-aware version of mut_change_character."""
+        elements = PE.parse_pattern(rule.pattern)
+        c_indices = [i for i, e in enumerate(elements) if e[0] == "c"]
+        if not c_indices:
+            return
+        idx = R.choice(c_indices)
+        new_char = self.codes[R.randint(0, len(self.codes) - 1)]
+        elements[idx] = ("c", new_char)
+        rule.pattern = PE.render_elements(elements)
 
     # Add to weight mutation
     def mut_change_weight(self, rule):
@@ -389,6 +514,10 @@ class Optimizer:
 
     # Alter patterns mutation (add letter)
     def mut_add_to_pattern(self, rule):
+        # Use element-aware insertion when experimental features could be active
+        if self.exp_char_classes or self.exp_variable_gaps:
+            self._mut_add_to_pattern_elements(rule)
+            return
         if len(rule.pattern) >= self.ruleSize:
             return
         pattern = rule.pattern
@@ -400,8 +529,28 @@ class Optimizer:
             pattern = pattern[0:insPos] + randomchar + pattern[insPos : (len(pattern))]
         rule.pattern = pattern
 
+    def _mut_add_to_pattern_elements(self, rule):
+        """Element-aware version of mut_add_to_pattern."""
+        if not rule.pattern:
+            rule.pattern = R.choice(self.codes)
+            if self.exp_weighted_positions:
+                rule.position_weights = [1.0]
+            return
+        elements = PE.parse_pattern(rule.pattern)
+        if len(elements) >= self.ruleSize:
+            return
+        new_elem = PE.random_element(self.codes)
+        pos = R.randint(0, len(elements))
+        elements.insert(pos, new_elem)
+        rule.pattern = PE.render_elements(elements)
+        self._sync_position_weights(rule, elements)
+
     # Alter patterns mutation (remove letter)
     def mut_remove_from_pattern(self, rule):
+        # Use element-aware removal when experimental features could be active
+        if self.exp_char_classes or self.exp_variable_gaps:
+            self._mut_remove_from_pattern_elements(rule)
+            return
         if len(rule.pattern) == 0:
             return
         if len(rule.pattern) == 1:
@@ -412,6 +561,28 @@ class Optimizer:
         pattern = pattern[0:insPos] + pattern[insPos + 1 : (len(pattern))]
         rule.pattern = pattern
 
+    def _mut_remove_from_pattern_elements(self, rule):
+        """Element-aware version of mut_remove_from_pattern."""
+        if not rule.pattern:
+            return
+        elements = PE.parse_pattern(rule.pattern)
+        if len(elements) <= 1:
+            rule.pattern = ""
+            rule.position_weights = None
+            return
+        # Don't remove the last concrete element
+        if PE.concrete_count(elements) <= 1:
+            concrete_idx = [i for i, e in enumerate(elements) if e[0] in ("c", "cc")]
+            removable = [i for i in range(len(elements)) if i not in concrete_idx]
+            if not removable:
+                return
+            idx = R.choice(removable)
+        else:
+            idx = R.randint(0, len(elements) - 1)
+        del elements[idx]
+        rule.pattern = PE.render_elements(elements)
+        self._sync_position_weights(rule, elements)
+
     # Insert gap mutation – convert a random amino-acid position to '_'
     def mut_insert_gap(self, rule):
         """Convert one random non-gap character in the pattern to '_'.
@@ -421,16 +592,36 @@ class Optimizer:
         """
         if len(rule.pattern) == 0:
             return
+        # Element-aware path when experimental features are active
+        if self.exp_char_classes or self.exp_variable_gaps:
+            self._mut_insert_gap_elements(rule)
+            return
         non_gap = [i for i, ch in enumerate(rule.pattern) if ch != "_"]
         if len(non_gap) <= 1:
             return  # keep at least one concrete amino acid
         idx = R.choice(non_gap)
         rule.pattern = rule.pattern[:idx] + "_" + rule.pattern[idx + 1 :]
 
+    def _mut_insert_gap_elements(self, rule):
+        """Element-aware version of mut_insert_gap."""
+        elements = PE.parse_pattern(rule.pattern)
+        # Find concrete-type elements (concrete chars and char classes)
+        concrete_idx = [i for i, e in enumerate(elements) if e[0] in ("c", "cc")]
+        if len(concrete_idx) <= 1:
+            return  # keep at least one concrete element
+        idx = R.choice(concrete_idx)
+        elements[idx] = ("w",)
+        rule.pattern = PE.render_elements(elements)
+        self._sync_position_weights(rule, elements)
+
     # Remove gap mutation – convert a random '_' back to a random amino acid
     def mut_remove_gap(self, rule):
         """Replace one random '_' in the pattern with a random amino acid."""
         if len(rule.pattern) == 0:
+            return
+        # Element-aware path when experimental features are active
+        if self.exp_char_classes or self.exp_variable_gaps:
+            self._mut_remove_gap_elements(rule)
             return
         gap_positions = [i for i, ch in enumerate(rule.pattern) if ch == "_"]
         if not gap_positions:
@@ -438,6 +629,199 @@ class Optimizer:
         idx = R.choice(gap_positions)
         new_char = self.codes[R.randint(0, len(self.codes) - 1)]
         rule.pattern = rule.pattern[:idx] + new_char + rule.pattern[idx + 1 :]
+
+    def _mut_remove_gap_elements(self, rule):
+        """Element-aware version of mut_remove_gap."""
+        elements = PE.parse_pattern(rule.pattern)
+        # Find wildcard elements (single wildcards only, not variable gaps)
+        gap_idx = [i for i, e in enumerate(elements) if e[0] == "w"]
+        if not gap_idx:
+            return
+        idx = R.choice(gap_idx)
+        new_char = self.codes[R.randint(0, len(self.codes) - 1)]
+        elements[idx] = ("c", new_char)
+        rule.pattern = PE.render_elements(elements)
+        self._sync_position_weights(rule, elements)
+
+    # ── Experimental mutations ──────────────────────────────────────────────
+
+    # --- Character class mutations ---
+
+    def mut_char_class(self, rule):
+        """Randomly add, expand, shrink, or dissolve a character class."""
+        if not rule.pattern or len(rule.pattern) == 0:
+            return
+        elements = PE.parse_pattern(rule.pattern)
+        if len(elements) == 0:
+            return
+
+        cc_indices = [i for i, e in enumerate(elements) if e[0] == "cc"]
+        c_indices = [i for i, e in enumerate(elements) if e[0] == "c"]
+
+        action = R.choice(["add", "expand", "shrink"])
+
+        if action == "add" and c_indices:
+            # Convert a concrete char to a 2-member class
+            idx = R.choice(c_indices)
+            original = elements[idx][1]
+            other = R.choice(self.codes)
+            chars = sorted(set([original, other]))
+            elements[idx] = ("cc", chars)
+        elif action == "expand" and cc_indices:
+            # Add a random amino acid to an existing class
+            idx = R.choice(cc_indices)
+            chars = list(elements[idx][1])
+            new_aa = R.choice(self.codes)
+            if new_aa not in chars and len(chars) < len(self.codes):
+                chars.append(new_aa)
+                chars.sort()
+            elements[idx] = ("cc", chars)
+        elif action == "shrink" and cc_indices:
+            # Remove a member from a class; if 1 left, convert to concrete
+            idx = R.choice(cc_indices)
+            chars = list(elements[idx][1])
+            if len(chars) > 1:
+                chars.remove(R.choice(chars))
+                if len(chars) == 1:
+                    elements[idx] = ("c", chars[0])
+                else:
+                    elements[idx] = ("cc", sorted(chars))
+        else:
+            return
+
+        rule.pattern = PE.render_elements(elements)
+        # Keep position_weights aligned
+        self._sync_position_weights(rule, elements)
+
+    # --- Variable-length gap mutations ---
+
+    def mut_variable_gap(self, rule):
+        """Randomly add, widen, narrow, or dissolve a variable-length gap."""
+        if not rule.pattern or len(rule.pattern) == 0:
+            return
+        elements = PE.parse_pattern(rule.pattern)
+        if len(elements) == 0:
+            return
+
+        vg_indices = [i for i, e in enumerate(elements) if e[0] == "vg"]
+        w_indices = [i for i, e in enumerate(elements) if e[0] == "w"]
+
+        # Need at least one concrete element to remain
+        num_concrete = PE.concrete_count(elements)
+
+        action = R.choice(["add", "widen", "narrow", "dissolve"])
+
+        if action == "add" and w_indices and num_concrete >= 1:
+            # Convert a fixed wildcard to a variable gap
+            idx = R.choice(w_indices)
+            lo = 1
+            hi = R.randint(2, self.max_variable_gap)
+            elements[idx] = ("vg", lo, hi)
+        elif action == "widen" and vg_indices:
+            idx = R.choice(vg_indices)
+            lo, hi = elements[idx][1], elements[idx][2]
+            if hi < self.max_variable_gap:
+                hi += 1
+            elements[idx] = ("vg", lo, hi)
+        elif action == "narrow" and vg_indices:
+            idx = R.choice(vg_indices)
+            lo, hi = elements[idx][1], elements[idx][2]
+            if R.random() < 0.5 and lo < hi:
+                lo += 1
+            elif hi > lo:
+                hi -= 1
+            elements[idx] = ("vg", lo, hi)
+        elif action == "dissolve" and vg_indices:
+            # Convert a variable gap back to a fixed wildcard
+            idx = R.choice(vg_indices)
+            elements[idx] = ("w",)
+        else:
+            return
+
+        rule.pattern = PE.render_elements(elements)
+        # Position weights become invalid for variable-gap patterns
+        if PE.has_variable_length(elements):
+            rule.position_weights = None
+
+    # --- Position weight mutations ---
+
+    def mut_position_weight(self, rule):
+        """Adjust a random position weight up or down."""
+        if not rule.pattern or len(rule.pattern) == 0:
+            return
+        elements = PE.parse_pattern(rule.pattern)
+        n = len(elements)
+        if n == 0:
+            return
+        # Variable-gap patterns don't support position weights
+        if PE.has_variable_length(elements):
+            rule.position_weights = None
+            return
+        # Initialise position weights if missing
+        if rule.position_weights is None or len(rule.position_weights) != n:
+            rule.position_weights = [1.0] * n
+        idx = R.randint(0, n - 1)
+        delta = round(R.uniform(-0.3, 0.3), 3)
+        rule.position_weights[idx] = max(0.0, rule.position_weights[idx] + delta)
+
+    # --- Composition mutations (individual-level) ---
+
+    def mut_composition(self, individual):
+        """Create, dissolve, or flip a composition group."""
+        if len(individual.rules) < 2:
+            return
+
+        action = R.choice(["create", "dissolve", "flip_op"])
+
+        # Gather existing groups
+        groups: dict[int, list] = {}
+        for rule in individual.rules:
+            if rule.group_id != 0:
+                groups.setdefault(rule.group_id, []).append(rule)
+        max_gid = max(groups.keys()) if groups else 0
+
+        if action == "create":
+            # Pick 2 random independent rules to form a new group
+            independents = [r for r in individual.rules if r.group_id == 0]
+            if len(independents) < 2:
+                return
+            members = R.sample(independents, 2)
+            new_gid = max_gid + 1
+            op = R.choice(["and", "or"])
+            for r in members:
+                r.group_id = new_gid
+                r.group_op = op
+        elif action == "dissolve" and groups:
+            gid = R.choice(list(groups.keys()))
+            for r in groups[gid]:
+                r.group_id = 0
+                r.group_op = "and"
+        elif action == "flip_op" and groups:
+            gid = R.choice(list(groups.keys()))
+            new_op = "or" if groups[gid][0].group_op == "and" else "and"
+            for r in groups[gid]:
+                r.group_op = new_op
+
+    # --- Helper: keep position_weights aligned with element count ---
+
+    def _sync_position_weights(self, rule, elements=None):
+        """Ensure position_weights length matches element count.
+
+        Pads with 1.0 or truncates as needed.
+        """
+        if rule.position_weights is None:
+            return
+        if elements is None:
+            elements = PE.parse_pattern(rule.pattern) if rule.pattern else []
+        n = len(elements)
+        if PE.has_variable_length(elements):
+            rule.position_weights = None
+            return
+        pw = rule.position_weights
+        if len(pw) < n:
+            pw.extend([1.0] * (n - len(pw)))
+        elif len(pw) > n:
+            rule.position_weights = pw[:n]
 
     # ── Regex-mode mutations ────────────────────────────────────────────────
 

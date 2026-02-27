@@ -12,3 +12,7 @@ class Rule:
         self.tree_shape = (
             tree_shape  # list representing tree structure (regex mode only)
         )
+        # ── Experimental fields ──
+        self.position_weights = None  # list[float] | None — per-element weights
+        self.group_id = 0  # 0 = independent (no composition group)
+        self.group_op = "and"  # "and" | "or"  (for composition groups)

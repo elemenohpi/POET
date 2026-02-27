@@ -4,6 +4,7 @@ import re
 import pandas as pd
 
 import regex_tree
+import pattern_engine as PE
 
 _codes_cache = None
 
@@ -58,32 +59,59 @@ class Individual:
             rule = Rule.Rule(pattern, tmpWeights[i], tmpStatus[i])
             self.rules.append(rule)
 
-    def init_pattern(self, gap_chance=0.15):
+    def init_pattern(self, gap_chance=0.15, config=None):
         """Initialize random substring rules.
 
         *gap_chance* controls the probability that any one character position
         in a newly created pattern is a gap ('_') instead of a concrete amino
         acid.  Set to 0.0 to disable initial gaps entirely.
+
+        When *config* is provided and experimental features are enabled, the
+        element-based engine is used to generate richer initial patterns.
         """
         codes = _get_codes()
-        for i in range(R.randint(1, int(self.maxRuleCount / 3))):
-            pattern = ""
+
+        # Detect experimental features from config
+        _bool = lambda k, d="False": (
+            config.get(k, d).strip().lower() == "true" if config else False
+        )
+        use_exp = _bool("exp_char_classes") or _bool("exp_variable_gaps")
+        use_pw = _bool("exp_weighted_positions")
+        class_chance = 0.15 if _bool("exp_char_classes") else 0.0
+
+        for _i in range(R.randint(1, int(self.maxRuleCount / 3))):
             weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
             pat_len = R.randint(1, self.ruleSize)
-            for j in range(pat_len):
-                if R.random() < gap_chance:
-                    pattern += "_"
-                else:
-                    pattern += codes[R.randint(0, len(codes) - 1)]
-            # Ensure at least one concrete amino acid (no all-gap patterns)
-            if all(ch == "_" for ch in pattern):
-                idx = R.randint(0, len(pattern) - 1)
-                pattern = (
-                    pattern[:idx]
-                    + codes[R.randint(0, len(codes) - 1)]
-                    + pattern[idx + 1 :]
-                )
-            rule = Rule.Rule(pattern, weight, 0)
+
+            if use_exp:
+                elements = []
+                for _j in range(pat_len):
+                    elements.append(PE.random_element(codes, gap_chance, class_chance))
+                # Ensure at least one concrete element
+                if PE.is_all_wildcard(elements):
+                    idx = R.randint(0, len(elements) - 1)
+                    elements[idx] = ("c", R.choice(codes))
+                pattern = PE.render_elements(elements)
+                rule = Rule.Rule(pattern, weight, 0)
+                if use_pw and not PE.has_variable_length(elements):
+                    rule.position_weights = [1.0] * len(elements)
+            else:
+                pattern = ""
+                for _j in range(pat_len):
+                    if R.random() < gap_chance:
+                        pattern += "_"
+                    else:
+                        pattern += codes[R.randint(0, len(codes) - 1)]
+                # Ensure at least one concrete amino acid (no all-gap patterns)
+                if all(ch == "_" for ch in pattern):
+                    idx = R.randint(0, len(pattern) - 1)
+                    pattern = (
+                        pattern[:idx]
+                        + codes[R.randint(0, len(codes) - 1)]
+                        + pattern[idx + 1 :]
+                    )
+                rule = Rule.Rule(pattern, weight, 0)
+
             self.rules.append(rule)
         self.bubbleSort()
 

@@ -56,9 +56,9 @@ def build_parser():
     )
     parser.add_argument(
         "--experiment",
-        nargs=2,
-        metavar=("CONFIG_A", "CONFIG_B"),
-        help="Compare two config files across multiple seeds. "
+        nargs="+",
+        metavar="CONFIG",
+        help="Compare two or more config files across multiple seeds. "
         "Use with --replicates and --gens.",
     )
     parser.add_argument(
@@ -96,10 +96,8 @@ def manage_input(args):
     if args.experiment:
         from experiment import run_experiment
 
-        config_b = configparser.read(args.experiment[1])
-        # Re-read config_a in case -config pointed elsewhere
-        config_a = configparser.read(args.experiment[0])
-        run_experiment(config_a, config_b, args.replicates, args.gens, args.workers)
+        configs = [configparser.read(p) for p in args.experiment]
+        run_experiment(configs, args.replicates, args.gens, args.workers)
         exit()
 
     if args.f:

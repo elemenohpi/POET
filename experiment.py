@@ -1,7 +1,7 @@
-"""Experiment mode: compare two configurations across multiple seeds.
+"""Experiment mode: compare two or more configurations across multiple seeds.
 
 Usage (via CLI):
-    python poet.py --experiment configA.ini configB.ini --replicates 10 --gens 100
+    python poet.py --experiment configA.ini configB.ini ... --replicates 10 --gens 50
 """
 
 import copy
@@ -14,57 +14,71 @@ import optimizer
 import pop as population
 
 
-def run_experiment(
-    config_a: dict, config_b: dict, replicates: int, gens: int, workers: int
-):
-    """Run both configs for *replicates* seeds × *gens* generations each.
+# ── Colour palette for up to 10 lines ──────────────────────────────────────
+_COLORS = [
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+    "#17becf",
+]
+
+
+def run_experiment(configs: list[dict], replicates: int, gens: int, workers: int):
+    """Run all configs for *replicates* seeds × *gens* generations each.
 
     Collects best fitness per generation for every replicate, then prints
-    a summary table comparing the two configurations.
+    a summary table and saves a multi-line comparison plot.
     """
-    label_a = config_a.get("matching_mode", "substring")
-    label_b = config_b.get("matching_mode", "substring")
-    # Disambiguate labels if they happen to be the same
-    if label_a == label_b:
-        label_a += "_A"
-        label_b += "_B"
+    # ── Derive labels ───────────────────────────────────────────────────
+    labels: list[str] = []
+    for i, cfg in enumerate(configs):
+        lbl = cfg.get("experiment_label", "")
+        if not lbl:
+            lbl = cfg.get("matching_mode", "substring")
+            lbl += "_{}".format(i)
+        labels.append(lbl)
+
+    # Ensure uniqueness
+    seen: dict[str, int] = {}
+    for i, lbl in enumerate(labels):
+        if lbl in seen:
+            seen[lbl] += 1
+            labels[i] = "{}_{}".format(lbl, seen[lbl])
+        else:
+            seen[lbl] = 0
 
     print("=" * 70)
     print("EXPERIMENT MODE")
-    print(
-        "  Config A : {} ({})".format(
-            label_a, config_a.get("matching_mode", "substring")
-        )
-    )
-    print(
-        "  Config B : {} ({})".format(
-            label_b, config_b.get("matching_mode", "substring")
-        )
-    )
+    for i, (lbl, cfg) in enumerate(zip(labels, configs)):
+        print("  Config {:>2d} : {}".format(i + 1, lbl))
     print("  Replicates : {}".format(replicates))
     print("  Generations: {}".format(gens))
     print("  Workers    : {}".format(workers if workers else "auto"))
     print("=" * 70)
 
-    results_a: list[list[float]] = []  # [replicate][generation] = best_fitness
-    results_b: list[list[float]] = []
+    # results[config_idx][replicate] = list[float] per generation
+    all_results: list[list[list[float]]] = [[] for _ in configs]
 
-    base_seed = int(config_a.get("seed", "1"))
+    base_seed = int(configs[0].get("seed", "1"))
 
     for rep in range(replicates):
         seed = base_seed + rep
         print("\n--- Replicate {}/{} (seed={}) ---".format(rep + 1, replicates, seed))
 
-        best_a = _run_single(config_a, label_a, seed, gens, workers)
-        results_a.append(best_a)
-
-        best_b = _run_single(config_b, label_b, seed, gens, workers)
-        results_b.append(best_b)
+        for ci, (cfg, lbl) in enumerate(zip(configs, labels)):
+            best = _run_single(cfg, lbl, seed, gens, workers)
+            all_results[ci].append(best)
 
     # ── Summary ─────────────────────────────────────────────────────────
-    _print_summary(label_a, label_b, results_a, results_b, gens, replicates)
-    _save_csv(label_a, label_b, results_a, results_b, gens, replicates)
-    _plot(label_a, label_b, results_a, results_b, gens)
+    _print_summary(labels, all_results, gens, replicates)
+    _save_csv(labels, all_results, gens, replicates)
+    _plot(labels, all_results, gens)
 
 
 def _run_single(
@@ -76,10 +90,13 @@ def _run_single(
     cfg["runs"] = str(gens)
     cfg["workers"] = str(workers)
 
+    # Sanitise label for filenames
+    safe_label = label.replace(" ", "_").replace("/", "-")
+
     # Unique output paths so runs don't clobber each other
     os.makedirs("output/experiment", exist_ok=True)
-    cfg["output_evo"] = "output/experiment/evo_{}_{}.csv".format(label, seed)
-    cfg["output_model"] = "output/experiment/model_{}_{}.csv".format(label, seed)
+    cfg["output_evo"] = "output/experiment/evo_{}_{}.csv".format(safe_label, seed)
+    cfg["output_model"] = "output/experiment/model_{}_{}.csv".format(safe_label, seed)
 
     rand.seed(int(cfg["seed"]))
 
@@ -118,62 +135,80 @@ def _parse_evo(path: str) -> list[float]:
     return values
 
 
-def _print_summary(la: str, lb: str, ra, rb, gens: int, reps: int):
+def _print_summary(labels: list[str], all_results, gens: int, reps: int):
     """Print a table of mean best fitness at key generation milestones."""
     import statistics
 
     print("\n" + "=" * 70)
-    print("SUMMARY  ({} replicates × {} generations)".format(reps, gens))
+    print("SUMMARY  ({} replicates x {} generations)".format(reps, gens))
     print("=" * 70)
-    print("{:>6s}  {:>14s}  {:>14s}  {:>10s}".format("Gen", la, lb, "Winner"))
-    print("-" * 50)
 
-    # Show milestones: every 10% of gens, plus first and last
+    # Column widths
+    cw = max(14, max(len(l) + 2 for l in labels))
+    header = "{:>6s}".format("Gen")
+    for lbl in labels:
+        header += "  {:>{w}s}".format(lbl, w=cw)
+    header += "  {:>12s}".format("Best")
+    print(header)
+    print("-" * len(header))
+
     milestones = sorted(set([0, gens - 1] + [int(gens * p / 10) for p in range(1, 10)]))
 
     for g in milestones:
-        vals_a = [r[g] for r in ra if g < len(r)]
-        vals_b = [r[g] for r in rb if g < len(r)]
-        if not vals_a or not vals_b:
-            continue
-        mean_a = statistics.mean(vals_a)
-        mean_b = statistics.mean(vals_b)
-        winner = la if mean_a < mean_b else lb if mean_b < mean_a else "tie"
-        print("{:>6d}  {:>14.4f}  {:>14.4f}  {:>10s}".format(g, mean_a, mean_b, winner))
+        row = "{:>6d}".format(g)
+        means = []
+        for ci, lbl in enumerate(labels):
+            vals = [r[g] for r in all_results[ci] if g < len(r)]
+            if vals:
+                m = statistics.mean(vals)
+                means.append((m, lbl))
+                row += "  {:>{w}.4f}".format(m, w=cw)
+            else:
+                means.append((float("inf"), lbl))
+                row += "  {:>{w}s}".format("N/A", w=cw)
+        # "Best" = lowest RMSE
+        best_lbl = min(means, key=lambda x: x[0])[1]
+        row += "  {:>12s}".format(best_lbl)
+        print(row)
 
-    # Final stats
-    final_a = [r[-1] for r in ra if r]
-    final_b = [r[-1] for r in rb if r]
-    mean_a = statistics.mean(final_a)
-    mean_b = statistics.mean(final_b)
-    std_a = statistics.stdev(final_a) if len(final_a) > 1 else 0
-    std_b = statistics.stdev(final_b) if len(final_b) > 1 else 0
-
-    print("-" * 50)
-    print("Final mean ± std:")
-    print("  {}: {:.4f} ± {:.4f}".format(la, mean_a, std_a))
-    print("  {}: {:.4f} ± {:.4f}".format(lb, mean_b, std_b))
-    overall = la if mean_a < mean_b else lb
-    print("  Overall winner: {}".format(overall))
+    # Final stats per config
+    print("-" * len(header))
+    print("Final generation mean +/- std:")
+    final_stats = []
+    for ci, lbl in enumerate(labels):
+        finals = [r[-1] for r in all_results[ci] if r]
+        m = statistics.mean(finals) if finals else float("nan")
+        s = statistics.stdev(finals) if len(finals) > 1 else 0
+        final_stats.append((m, s, lbl))
+        print("  {}: {:.4f} +/- {:.4f}".format(lbl, m, s))
+    overall = min(final_stats, key=lambda x: x[0])
+    print("  Overall best: {}".format(overall[2]))
     print("=" * 70)
 
 
-def _save_csv(la: str, lb: str, ra, rb, gens: int, reps: int):
+def _save_csv(labels: list[str], all_results, gens: int, reps: int):
     """Save raw results to a CSV for further analysis."""
     path = "output/experiment/experiment_results.csv"
     with open(path, "w") as f:
-        f.write("replicate,generation,{}_best,{}_best\n".format(la, lb))
+        header = "replicate,generation," + ",".join("{}_best".format(l) for l in labels)
+        f.write(header + "\n")
         for rep in range(reps):
-            max_g = min(len(ra[rep]), len(rb[rep]))
+            max_g = min(len(all_results[ci][rep]) for ci in range(len(labels)))
             for g in range(max_g):
-                f.write("{},{},{},{}\n".format(rep, g, ra[rep][g], rb[rep][g]))
+                vals = ",".join(
+                    str(all_results[ci][rep][g]) for ci in range(len(labels))
+                )
+                f.write("{},{},{}\n".format(rep, g, vals))
     print("\nRaw results saved to {}".format(path))
 
 
-def _plot(la: str, lb: str, ra, rb, gens: int):
-    """Plot mean best fitness ± std error for both configs and save as PNG."""
+def _plot(labels: list[str], all_results, gens: int):
+    """Plot mean best fitness +/- std error for all configs and save as PNG."""
     import statistics
 
+    import matplotlib
+
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     generations = list(range(gens))
@@ -184,7 +219,7 @@ def _plot(la: str, lb: str, ra, rb, gens: int):
             vals = [r[g] for r in results if g < len(r)]
             if vals:
                 m = statistics.mean(vals)
-                se = (statistics.stdev(vals) / len(vals) ** 0.5) if len(vals) > 1 else 0
+                se = statistics.stdev(vals) / len(vals) ** 0.5 if len(vals) > 1 else 0
                 means.append(m)
                 errs.append(se)
             else:
@@ -192,37 +227,35 @@ def _plot(la: str, lb: str, ra, rb, gens: int):
                 errs.append(0)
         return means, errs
 
-    means_a, errs_a = _stats(ra)
-    means_b, errs_b = _stats(rb)
+    fig, ax = plt.subplots(figsize=(12, 7))
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    for ci, lbl in enumerate(labels):
+        means, errs = _stats(all_results[ci])
+        color = _COLORS[ci % len(_COLORS)]
+        ax.errorbar(
+            generations,
+            means,
+            yerr=errs,
+            label=lbl,
+            color=color,
+            capsize=2,
+            elinewidth=0.8,
+            markeredgewidth=0.8,
+            errorevery=max(1, gens // 15),
+            linewidth=1.5,
+        )
 
-    ax.errorbar(
-        generations,
-        means_a,
-        yerr=errs_a,
-        label=la,
-        capsize=3,
-        elinewidth=1,
-        markeredgewidth=1,
-        errorevery=max(1, gens // 20),
+    ax.set_xlabel("Generation", fontsize=12)
+    ax.set_ylabel("Best Fitness (lower is better)", fontsize=12)
+    ax.set_title(
+        "Experimental Feature Comparison ({} replicates x {} gens)".format(
+            len(all_results[0]), gens
+        ),
+        fontsize=14,
     )
-    ax.errorbar(
-        generations,
-        means_b,
-        yerr=errs_b,
-        label=lb,
-        capsize=3,
-        elinewidth=1,
-        markeredgewidth=1,
-        errorevery=max(1, gens // 20),
-    )
-
-    ax.set_xlabel("Generation")
-    ax.set_ylabel("Best Fitness (lower is better)")
-    ax.set_title("{} vs {} ({} replicates)".format(la, lb, len(ra)))
-    ax.legend()
+    ax.legend(fontsize=9, loc="best", framealpha=0.9)
     ax.grid(True, alpha=0.3)
+    ax.tick_params(labelsize=10)
 
     os.makedirs("output/experiment", exist_ok=True)
     out_path = "output/experiment/experiment_plot.png"
