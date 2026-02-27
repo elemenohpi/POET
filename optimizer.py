@@ -13,7 +13,6 @@ class Optimizer:
         self.P = population
         self.runs = int(config["runs"])
         self.tournamentSize = int(config["tournament_size"])
-        self.logInterval = int(config["pop_log_interval"])
         self.crossRate = float(config["crossover_unused_selection_chance"])
         self.ruleSize = int(config["maximum_rule_size"])
         self.ruleCount = int(config["maximum_rule_count"])
