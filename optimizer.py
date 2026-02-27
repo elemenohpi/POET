@@ -112,8 +112,12 @@ class Optimizer:
             # Save the best model
             data = []
             for rule in bestIndividual.rules:
-                data.append([rule.pattern, rule.weight, rule.status])
-            df = pd.DataFrame(data, columns=["pattern", "weight", "status"])
+                data.append(
+                    [rule.pattern, rule.weight, rule.status, rule.match_direction]
+                )
+            df = pd.DataFrame(
+                data, columns=["pattern", "weight", "status", "match_direction"]
+            )
             arch.saveModel(df)
 
             # Select Parents (Tournament Selection) and Crossover

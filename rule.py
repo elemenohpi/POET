@@ -7,3 +7,4 @@ class Rule:
         self.pattern = pattern
         self.weight = weight
         self.status = status
+        self.match_direction = ""

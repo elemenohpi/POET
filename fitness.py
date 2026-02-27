@@ -33,7 +33,7 @@ def _worker_measure(individual):
     """Evaluate a single individual in a worker process."""
     assert _worker_fitness is not None
     fitness_val, test_val = _worker_fitness.measureTotal(individual)
-    rule_statuses = [rule.status for rule in individual.rules]
+    rule_statuses = [(rule.status, rule.match_direction) for rule in individual.rules]
     return fitness_val, test_val, individual.usedRulesCount, rule_statuses
 
 
@@ -117,10 +117,30 @@ class Fitness:
                     continue
 
                 substr = sequence[pos : pos + plen]
-                if pattern == substr or rev_pattern == substr:
+                if pattern == substr:
                     if rule.status == 0:
                         rule.status = 1
+                        rule.match_direction = "forward"
                         individual.usedRulesCount += 1
+                    elif rule.match_direction == "reverse":
+                        rule.match_direction = "both"
+
+                    if mode == 0:
+                        measuredFitness += rule.weight
+                    elif mode == 1:
+                        measuredFitness *= rule.weight
+                    else:
+                        raise ValueError(
+                            "Invalid pattern_mode: expected 0 (summation) or 1 (multiplication)"
+                        )
+                    break
+                elif rev_pattern == substr:
+                    if rule.status == 0:
+                        rule.status = 1
+                        rule.match_direction = "reverse"
+                        individual.usedRulesCount += 1
+                    elif rule.match_direction == "forward":
+                        rule.match_direction = "both"
 
                     if mode == 0:
                         measuredFitness += rule.weight
@@ -141,6 +161,7 @@ class Fitness:
         individual.usedRulesCount = 0
         for rule in individual.rules:
             rule.status = 0
+            rule.match_direction = ""
 
     def measure_dataset(self, individual):
         train_error = 0.0
@@ -244,8 +265,9 @@ class Fitness:
                 ind.fitness = f
                 ind.test = t
                 ind.usedRulesCount = urc
-                for rule, status in zip(ind.rules, statuses):
+                for rule, (status, direction) in zip(ind.rules, statuses):
                     rule.status = status
+                    rule.match_direction = direction
         else:
             for ind in individuals:
                 ind.fitness, ind.test = self.measureTotal(ind)
