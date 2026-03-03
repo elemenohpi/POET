@@ -120,7 +120,7 @@ def manage_input(args):
 
     if args.predict:
         print(
-            "Predicting proteins:\nPopulation pool is set to be 10000\n================================"
+            "Predicting proteins:\nPopulation pool is set to be 1000000\n================================"
         )
         count = int(input("Enter prediction count: "))
         seq_size = int(input("Enter protein sequences size: "))
