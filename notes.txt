@@ -1,0 +1,3 @@
+python scripts/analyze_scripts/evaluate_model.py output/Mar-02-2026-upar_epoch_0/models/cleaned/model_40.csv -c configs/exp_charclass_vargaps.ini -o predictions.csv
+
+python scripts/analyze_scripts/permutation_predictor.py output/Mar-02-2026-upar_epoch_0/models/cleaned/model_40.csv -c configs/exp_charclass_vargaps.ini -n 1 -o top15.csv -p 100000
