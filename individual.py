@@ -91,6 +91,10 @@ class Individual:
                 if PE.is_all_wildcard(elements):
                     idx = R.randint(0, len(elements) - 1)
                     elements[idx] = ("c", R.choice(codes))
+                # Gaps are only allowed in the middle - strip leading/trailing
+                elements = PE.strip_edge_gaps(elements)
+                if not elements:
+                    elements = [("c", R.choice(codes))]
                 pattern = PE.render_elements(elements)
                 rule = Rule.Rule(pattern, weight, 0)
                 if use_pw and not PE.has_variable_length(elements):
@@ -110,6 +114,10 @@ class Individual:
                         + codes[R.randint(0, len(codes) - 1)]
                         + pattern[idx + 1 :]
                     )
+                # Gaps are only allowed in the middle - strip leading/trailing
+                pattern = pattern.strip("_")
+                if not pattern:
+                    pattern = codes[R.randint(0, len(codes) - 1)]
                 rule = Rule.Rule(pattern, weight, 0)
 
             self.rules.append(rule)

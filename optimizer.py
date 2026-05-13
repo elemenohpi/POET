@@ -454,6 +454,10 @@ class Optimizer:
             # Ensure at least one concrete element
             if PE.is_all_wildcard(elements):
                 elements[R.randint(0, len(elements) - 1)] = ("c", R.choice(self.codes))
+            # Gaps are only allowed in the middle - strip leading/trailing
+            elements = PE.strip_edge_gaps(elements)
+            if not elements:
+                elements = [("c", R.choice(self.codes))]
             pattern = PE.render_elements(elements)
             rule = Rule.Rule(pattern, weight, 0)
             if self.exp_weighted_positions and not PE.has_variable_length(elements):
@@ -542,6 +546,9 @@ class Optimizer:
         new_elem = PE.random_element(self.codes)
         pos = R.randint(0, len(elements))
         elements.insert(pos, new_elem)
+        elements = PE.strip_edge_gaps(elements)
+        if not elements:
+            elements = [("c", R.choice(self.codes))]
         rule.pattern = PE.render_elements(elements)
         self._sync_position_weights(rule, elements)
 
@@ -580,6 +587,7 @@ class Optimizer:
         else:
             idx = R.randint(0, len(elements) - 1)
         del elements[idx]
+        elements = PE.strip_edge_gaps(elements)
         rule.pattern = PE.render_elements(elements)
         self._sync_position_weights(rule, elements)
 
@@ -587,8 +595,8 @@ class Optimizer:
     def mut_insert_gap(self, rule):
         """Convert one random non-gap character in the pattern to '_'.
 
-        Never converts the last remaining amino acid, to prevent
-        all-wildcard patterns that match everything.
+        Never converts the last remaining amino acid, and never converts
+        the first or last position (gaps are only allowed in the middle).
         """
         if len(rule.pattern) == 0:
             return
@@ -596,21 +604,42 @@ class Optimizer:
         if self.exp_char_classes or self.exp_variable_gaps:
             self._mut_insert_gap_elements(rule)
             return
-        non_gap = [i for i, ch in enumerate(rule.pattern) if ch != "_"]
-        if len(non_gap) <= 1:
+        n = len(rule.pattern)
+        if n < 3:
+            return  # need at least one interior position
+        # Only interior non-gap positions are candidates
+        non_gap = [
+            i for i, ch in enumerate(rule.pattern)
+            if ch != "_" and 0 < i < n - 1
+        ]
+        total_non_gap = sum(1 for ch in rule.pattern if ch != "_")
+        if not non_gap or total_non_gap <= 1:
             return  # keep at least one concrete amino acid
         idx = R.choice(non_gap)
         rule.pattern = rule.pattern[:idx] + "_" + rule.pattern[idx + 1 :]
 
     def _mut_insert_gap_elements(self, rule):
-        """Element-aware version of mut_insert_gap."""
+        """Element-aware version of mut_insert_gap.
+
+        Gaps are only allowed in the middle, so the first and last
+        positions are excluded from candidates.
+        """
         elements = PE.parse_pattern(rule.pattern)
-        # Find concrete-type elements (concrete chars and char classes)
-        concrete_idx = [i for i, e in enumerate(elements) if e[0] in ("c", "cc")]
-        if len(concrete_idx) <= 1:
-            return  # keep at least one concrete element
+        n = len(elements)
+        if n < 3:
+            return  # need at least one interior position
+        # Only interior concrete-type elements are candidates
+        concrete_idx = [
+            i for i, e in enumerate(elements)
+            if e[0] in ("c", "cc") and 0 < i < n - 1
+        ]
+        # Keep at least one concrete element overall
+        total_concrete = PE.concrete_count(elements)
+        if not concrete_idx or total_concrete <= 1:
+            return
         idx = R.choice(concrete_idx)
         elements[idx] = ("w",)
+        elements = PE.strip_edge_gaps(elements)
         rule.pattern = PE.render_elements(elements)
         self._sync_position_weights(rule, elements)
 
@@ -640,6 +669,7 @@ class Optimizer:
         idx = R.choice(gap_idx)
         new_char = self.codes[R.randint(0, len(self.codes) - 1)]
         elements[idx] = ("c", new_char)
+        elements = PE.strip_edge_gaps(elements)
         rule.pattern = PE.render_elements(elements)
         self._sync_position_weights(rule, elements)
 
@@ -689,6 +719,7 @@ class Optimizer:
         else:
             return
 
+        elements = PE.strip_edge_gaps(elements)
         rule.pattern = PE.render_elements(elements)
         # Keep position_weights aligned
         self._sync_position_weights(rule, elements)
@@ -696,15 +727,24 @@ class Optimizer:
     # --- Variable-length gap mutations ---
 
     def mut_variable_gap(self, rule):
-        """Randomly add, widen, narrow, or dissolve a variable-length gap."""
+        """Randomly add, widen, narrow, or dissolve a variable-length gap.
+
+        Variable gaps are only allowed in interior positions; conversions
+        at the first or last index are skipped.
+        """
         if not rule.pattern or len(rule.pattern) == 0:
             return
         elements = PE.parse_pattern(rule.pattern)
-        if len(elements) == 0:
+        n = len(elements)
+        if n == 0:
             return
 
+        # Only consider interior wildcards as variable-gap candidates
         vg_indices = [i for i, e in enumerate(elements) if e[0] == "vg"]
-        w_indices = [i for i, e in enumerate(elements) if e[0] == "w"]
+        w_indices = [
+            i for i, e in enumerate(elements)
+            if e[0] == "w" and 0 < i < n - 1
+        ]
 
         # Need at least one concrete element to remain
         num_concrete = PE.concrete_count(elements)
@@ -738,6 +778,7 @@ class Optimizer:
         else:
             return
 
+        elements = PE.strip_edge_gaps(elements)
         rule.pattern = PE.render_elements(elements)
         # Position weights become invalid for variable-gap patterns
         if PE.has_variable_length(elements):

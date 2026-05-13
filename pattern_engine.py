@@ -253,3 +253,24 @@ def random_variable_gap(max_gap=5):
     lo = R.randint(1, max(1, max_gap - 1))
     hi = R.randint(lo, max_gap)
     return ("vg", lo, hi)
+
+
+def is_gap_element(elem):
+    """True if *elem* is a wildcard ('w') or variable-length gap ('vg')."""
+    return elem[0] in ("w", "vg")
+
+
+def strip_edge_gaps(elements):
+    """Remove leading and trailing gap/wildcard elements.
+
+    Returns a new list with all leading and trailing ``('w',)`` and
+    ``('vg', lo, hi)`` elements stripped. Gaps are only allowed in the
+    interior of a pattern.
+    """
+    start = 0
+    end = len(elements)
+    while start < end and is_gap_element(elements[start]):
+        start += 1
+    while end > start and is_gap_element(elements[end - 1]):
+        end -= 1
+    return elements[start:end]
