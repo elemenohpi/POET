@@ -82,6 +82,9 @@ class Optimizer:
                 else 0.0
             )
             self.max_variable_gap = int(config.get("max_variable_gap", "6"))
+            # Max amino acids inside [] character classes (0 = unlimited)
+            _mcs = int(config.get("max_class_size", "0"))
+            self.max_class_size = _mcs if _mcs > 0 else None
         elif self.matching_mode == "regex":
             # Regex-mode config and mutation rates
             self.depth_tree = int(config.get("max_depth_tree", "4"))
@@ -450,7 +453,9 @@ class Optimizer:
             class_ch = 0.15 if self.exp_char_classes else 0.0
             elements = []
             for _ in range(R.randint(1, self.ruleSize)):
-                elements.append(PE.random_element(self.codes, gap_ch, class_ch))
+                elements.append(
+                    PE.random_element(self.codes, gap_ch, class_ch, self.max_class_size)
+                )
             # Ensure at least one concrete element
             if PE.is_all_wildcard(elements):
                 elements[R.randint(0, len(elements) - 1)] = ("c", R.choice(self.codes))
@@ -543,7 +548,7 @@ class Optimizer:
         elements = PE.parse_pattern(rule.pattern)
         if len(elements) >= self.ruleSize:
             return
-        new_elem = PE.random_element(self.codes)
+        new_elem = PE.random_element(self.codes, max_class_size=self.max_class_size)
         pos = R.randint(0, len(elements))
         elements.insert(pos, new_elem)
         elements = PE.strip_edge_gaps(elements)
@@ -609,8 +614,7 @@ class Optimizer:
             return  # need at least one interior position
         # Only interior non-gap positions are candidates
         non_gap = [
-            i for i, ch in enumerate(rule.pattern)
-            if ch != "_" and 0 < i < n - 1
+            i for i, ch in enumerate(rule.pattern) if ch != "_" and 0 < i < n - 1
         ]
         total_non_gap = sum(1 for ch in rule.pattern if ch != "_")
         if not non_gap or total_non_gap <= 1:
@@ -630,8 +634,7 @@ class Optimizer:
             return  # need at least one interior position
         # Only interior concrete-type elements are candidates
         concrete_idx = [
-            i for i, e in enumerate(elements)
-            if e[0] in ("c", "cc") and 0 < i < n - 1
+            i for i, e in enumerate(elements) if e[0] in ("c", "cc") and 0 < i < n - 1
         ]
         # Keep at least one concrete element overall
         total_concrete = PE.concrete_count(elements)
@@ -689,8 +692,12 @@ class Optimizer:
         c_indices = [i for i, e in enumerate(elements) if e[0] == "c"]
 
         action = R.choice(["add", "expand", "shrink"])
+        cap = self.max_class_size
 
         if action == "add" and c_indices:
+            # Skip if classes are effectively disabled by the cap
+            if cap is not None and cap < 2:
+                return
             # Convert a concrete char to a 2-member class
             idx = R.choice(c_indices)
             original = elements[idx][1]
@@ -702,7 +709,8 @@ class Optimizer:
             idx = R.choice(cc_indices)
             chars = list(elements[idx][1])
             new_aa = R.choice(self.codes)
-            if new_aa not in chars and len(chars) < len(self.codes):
+            upper = len(self.codes) if cap is None else min(len(self.codes), cap)
+            if new_aa not in chars and len(chars) < upper:
                 chars.append(new_aa)
                 chars.sort()
             elements[idx] = ("cc", chars)
@@ -741,10 +749,7 @@ class Optimizer:
 
         # Only consider interior wildcards as variable-gap candidates
         vg_indices = [i for i, e in enumerate(elements) if e[0] == "vg"]
-        w_indices = [
-            i for i, e in enumerate(elements)
-            if e[0] == "w" and 0 < i < n - 1
-        ]
+        w_indices = [i for i, e in enumerate(elements) if e[0] == "w" and 0 < i < n - 1]
 
         # Need at least one concrete element to remain
         num_concrete = PE.concrete_count(elements)

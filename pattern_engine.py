@@ -18,7 +18,6 @@ Element types (tuples)
 
 import random as R
 
-
 # ---------------------------------------------------------------------------
 # Parsing
 # ---------------------------------------------------------------------------
@@ -231,17 +230,26 @@ def match_at_weighted(elements, sequence, pos, position_weights, threshold=0.7):
 # ---------------------------------------------------------------------------
 
 
-def random_element(codes, gap_chance=0.10, class_chance=0.15):
+def random_element(codes, gap_chance=0.10, class_chance=0.15, max_class_size=None):
     """Generate one random element.
 
     *codes* is the list of amino-acid single-letter codes.
+    *max_class_size* optionally caps the number of amino acids in a
+    generated character class. ``None`` or values <= 0 mean unlimited
+    (default upper bound of 4 still applies for initial classes).
+    If ``max_class_size`` is 1, character classes are disabled and a
+    concrete element is returned instead.
     """
     r = R.random()
     if r < gap_chance:
         return ("w",)
     elif r < gap_chance + class_chance:
-        # Character class with 2-4 members
-        size = R.randint(2, min(4, len(codes)))
+        upper = min(4, len(codes))
+        if max_class_size is not None and max_class_size > 0:
+            upper = min(upper, max_class_size)
+        if upper < 2:
+            return ("c", R.choice(codes))
+        size = R.randint(2, upper)
         chars = sorted(set(R.sample(codes, size)))
         return ("cc", chars)
     else:

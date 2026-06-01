@@ -78,6 +78,8 @@ class Individual:
         use_exp = _bool("exp_char_classes") or _bool("exp_variable_gaps")
         use_pw = _bool("exp_weighted_positions")
         class_chance = 0.15 if _bool("exp_char_classes") else 0.0
+        _mcs = int(config.get("max_class_size", "0")) if config else 0
+        max_class_size = _mcs if _mcs > 0 else None
 
         for _i in range(R.randint(1, int(self.maxRuleCount / 3))):
             weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
@@ -86,7 +88,11 @@ class Individual:
             if use_exp:
                 elements = []
                 for _j in range(pat_len):
-                    elements.append(PE.random_element(codes, gap_chance, class_chance))
+                    elements.append(
+                        PE.random_element(
+                            codes, gap_chance, class_chance, max_class_size
+                        )
+                    )
                 # Ensure at least one concrete element
                 if PE.is_all_wildcard(elements):
                     idx = R.randint(0, len(elements) - 1)
