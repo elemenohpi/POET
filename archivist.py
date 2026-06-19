@@ -21,7 +21,7 @@ class Archivist:
     def saveModel(self, df):
         path = self.config["output_model"]
         self._ensure_parent_dir(path)
-        df.to_csv(path)
+        df.to_csv(path, index=False)
 
     def setup(self, archive=False):
         os.makedirs("./output", exist_ok=True)

@@ -65,6 +65,10 @@ def main(config_path="configs/chimera_multihance.ini", gens=10, seed=333):
     ]
     if model.empty:
         raise AssertionError("verification model is empty")
+    if any(col.startswith("Unnamed") for col in model.columns):
+        raise AssertionError("model contains an unnamed index column")
+    if "status" in model and (model["status"].astype(str) == "0").any():
+        raise AssertionError("model contains inactive status=0 rules")
     if len(evo_lines) - 1 < gens:
         raise AssertionError("evolution log has fewer rows than requested gens")
     final_best = evo_lines[-1].split(",")[1]

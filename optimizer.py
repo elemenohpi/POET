@@ -213,6 +213,8 @@ class Optimizer:
                 ]
             )
             for rule in bestIndividual.rules:
+                if rule.status == 0:
+                    continue
                 row = [
                     rule.pattern,
                     rule.weight,
