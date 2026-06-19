@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 import pattern_engine as PE
+import sequence_codec as SC
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -28,7 +29,9 @@ def _init_worker(worker_data):
     _worker_fitness.dataset_size = worker_data["dataset_size"]
     _worker_fitness.config = worker_data["config"]
     _worker_fitness.matching_mode = worker_data["matching_mode"]
+    _worker_fitness.token_mode = worker_data.get("token_mode", False)
     _worker_fitness.enable_gaps = worker_data.get("enable_gaps", True)
+    _worker_fitness.allow_reverse_match = worker_data.get("allow_reverse_match", True)
     _worker_fitness.parsimony_pressure = worker_data.get("parsimony_pressure", 0.0)
     # Experimental feature flags
     _worker_fitness.exp_char_classes = worker_data.get("exp_char_classes", False)
@@ -65,7 +68,13 @@ class Fitness:
         self.dataset_size = len(self.sequences)
 
         self.matching_mode = config.get("matching_mode", "substring")
+        self.token_mode = SC.is_token_mode(config)
         self.enable_gaps = config.get("enable_gaps", "True").strip().lower() == "true"
+        reverse_default = "False" if self.token_mode else "True"
+        self.allow_reverse_match = (
+            config.get("allow_reverse_match", reverse_default).strip().lower()
+            == "true"
+        )
         self.k = 0
 
         # ── Experimental feature flags ──
@@ -143,6 +152,8 @@ class Fitness:
             return self._eval_regex(
                 sequence, actualFitness, individual, returnPrediction
             )
+        if self.token_mode:
+            return self._eval_token(sequence, actualFitness, individual, returnPrediction)
         if self._use_experimental:
             return self._eval_substring_experimental(
                 sequence, actualFitness, individual, returnPrediction
@@ -182,7 +193,8 @@ class Fitness:
             if all(ch == "_" for ch in p):
                 continue
             has_gap = gaps_enabled and "_" in p
-            rule_data.append((p, p[::-1], len(p), has_gap, rule))
+            rev_pattern = p[::-1] if self.allow_reverse_match else None
+            rule_data.append((p, rev_pattern, len(p), has_gap, rule))
 
         for pos in range(seq_len):
             remaining = seq_len - pos
@@ -206,12 +218,61 @@ class Fitness:
                     measuredFitness += rule.weight
                     break
 
-                rev_match = (
-                    self._match_gap(rev_pattern, substr)
-                    if has_gap
-                    else rev_pattern == substr
-                )
-                if rev_match:
+                if rev_pattern is not None:
+                    rev_match = (
+                        self._match_gap(rev_pattern, substr)
+                        if has_gap
+                        else rev_pattern == substr
+                    )
+                    if rev_match:
+                        if rule.status == 0:
+                            rule.status = 1
+                            rule.match_direction = "reverse"
+                            individual.usedRulesCount += 1
+                        elif rule.match_direction == "forward":
+                            rule.match_direction = "both"
+                        measuredFitness += rule.weight
+                        break
+
+        error = abs(measuredFitness - actualFitness)
+        if returnPrediction is True:
+            return error, measuredFitness
+        return error
+
+    def _eval_token(self, sequence, actualFitness, individual, returnPrediction=False):
+        sequence_tokens = SC.split_tokens(sequence, self.config)
+        seq_len = len(sequence_tokens)
+        measuredFitness = 0.0
+
+        rule_data = []
+        for rule in individual.rules:
+            tokens = SC.split_tokens(rule.pattern, self.config)
+            if not tokens or SC.token_pattern_is_all_wildcard(tokens):
+                continue
+            rev_tokens = list(reversed(tokens)) if self.allow_reverse_match else None
+            rule_data.append((tokens, rev_tokens, len(tokens), rule))
+
+        for pos in range(seq_len):
+            remaining = seq_len - pos
+            for tokens, rev_tokens, plen, rule in rule_data:
+                if plen > remaining:
+                    continue
+
+                if SC.token_pattern_matches(
+                    tokens, sequence_tokens, pos, self.enable_gaps
+                ):
+                    if rule.status == 0:
+                        rule.status = 1
+                        rule.match_direction = "forward"
+                        individual.usedRulesCount += 1
+                    elif rule.match_direction == "reverse":
+                        rule.match_direction = "both"
+                    measuredFitness += rule.weight
+                    break
+
+                if rev_tokens is not None and SC.token_pattern_matches(
+                    rev_tokens, sequence_tokens, pos, self.enable_gaps
+                ):
                     if rule.status == 0:
                         rule.status = 1
                         rule.match_direction = "reverse"
@@ -518,7 +579,9 @@ class Fitness:
             "dataset_size": self.dataset_size,
             "config": self.config,
             "matching_mode": self.matching_mode,
+            "token_mode": self.token_mode,
             "enable_gaps": self.enable_gaps,
+            "allow_reverse_match": self.allow_reverse_match,
             "parsimony_pressure": self.parsimony_pressure,
             "exp_char_classes": self.exp_char_classes,
             "exp_variable_gaps": self.exp_variable_gaps,
@@ -625,6 +688,8 @@ class Fitness:
             return 0
         if self.matching_mode == "regex":
             return self._count_matches_regex(sequence, p)
+        if self.token_mode:
+            return self._count_matches_token(sequence, p)
         if self._use_experimental:
             return self._count_matches_experimental(sequence, p)
         return self._count_matches_substring(sequence, p)
@@ -637,13 +702,38 @@ class Fitness:
         if all(ch == "_" for ch in pattern):
             return 0
         has_gap = self.enable_gaps and "_" in pattern
-        rev = pattern[::-1]
+        rev = pattern[::-1] if self.allow_reverse_match else None
         count = 0
         for pos in range(seq_len - plen + 1):
             sub = sequence[pos : pos + plen]
             if (self._match_gap(pattern, sub) if has_gap else pattern == sub):
                 count += 1
-            elif (self._match_gap(rev, sub) if has_gap else rev == sub):
+            elif rev is not None and (
+                self._match_gap(rev, sub) if has_gap else rev == sub
+            ):
+                count += 1
+        return count
+
+    def _count_matches_token(self, sequence, pattern):
+        sequence_tokens = SC.split_tokens(sequence, self.config)
+        pattern_tokens = SC.split_tokens(pattern, self.config)
+        plen = len(pattern_tokens)
+        if plen == 0 or plen > len(sequence_tokens):
+            return 0
+        if SC.token_pattern_is_all_wildcard(pattern_tokens):
+            return 0
+        rev_tokens = (
+            list(reversed(pattern_tokens)) if self.allow_reverse_match else None
+        )
+        count = 0
+        for pos in range(len(sequence_tokens) - plen + 1):
+            if SC.token_pattern_matches(
+                pattern_tokens, sequence_tokens, pos, self.enable_gaps
+            ):
+                count += 1
+            elif rev_tokens is not None and SC.token_pattern_matches(
+                rev_tokens, sequence_tokens, pos, self.enable_gaps
+            ):
                 count += 1
         return count
 
@@ -661,7 +751,7 @@ class Fitness:
                 break
             if PE.match_at(elements, sequence, pos):
                 count += 1
-            elif PE.match_at(rev_elements, sequence, pos):
+            elif self.allow_reverse_match and PE.match_at(rev_elements, sequence, pos):
                 count += 1
         return count
 

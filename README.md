@@ -20,7 +20,7 @@ If you're using PyCharm:
 
 ### Installing Required Libraries
 
-The required libraries for POET are `pandas` and `scipy`.
+The required libraries for POET are listed in `requirements.txt`.
 
 #### Using PyCharm (Recommended):
 
@@ -29,10 +29,15 @@ The required libraries for POET are `pandas` and `scipy`.
 
 #### Using Terminal:
 
-1. Run the following commands:
-   ```bash
-   pip install pandas
-   pip install scipy
+1. Create and activate a virtual environment. Python 3.11 is known to work:
+   ```powershell
+   py -3.11 -m venv .venv
+   .venv\Scripts\activate
+   ```
+
+2. Install the pinned dependencies:
+   ```powershell
+   python -m pip install -r requirements.txt
    ```
 
 **Note:** In some cases, installing via pip might require troubleshooting or additional steps. Make sure to check for meaningful error messages that might guide the resolution.
@@ -57,15 +62,52 @@ git clone https://github.com/elemenohpi/POET.git
 You can run POET through a terminal using the following command in the main directory of the project:
 
 ```
-python run.py
+python poet.py
 ```
 
 additional options and runtime commands can be found by adding `-h` option to the command above to access the help instructions:
 
 ```
-python run.py -h
+python poet.py -h
 ```
 
 If there are further issues related to Python not being recognized, ensure Python is added to your system's PATH. [Here's a guide on how to do that.](https://realpython.com/add-python-to-path/)
 
-Make sure all the datasets (`available in data/`) and configuration files (`config.ini`) are updated according to your goal before running POET experiments. 
+Make sure all the datasets (`available in data/`) and configuration files (`config.ini`) are updated according to your goal before running POET experiments.
+
+## POET-Chimera Workflow
+
+This branch supports tokenized 1B2/1B3 chimera experiments. Each sequence is
+encoded as 12 fixed target slots, and each token records both the target slot
+and the donor region, for example:
+
+```
+S06:B2_09
+```
+
+means "target slot 6 receives B2 region 9". This keeps POET motifs
+position-aware while allowing any-to-any donor-region swaps.
+
+Build the MultiHance-only training data from the initial workbook:
+
+```powershell
+python scripts/chimera/build_chimera_dataset.py
+```
+
+Train a chimera model:
+
+```powershell
+python poet.py -config configs/chimera_multihance.ini
+```
+
+Rank any-to-any candidates from a trained model:
+
+```powershell
+python scripts/chimera/rank_chimera_candidates.py output/chimera/model.csv -c configs/chimera_multihance.ini --backbone B3 --max-swaps 2 --top 50 -o output/chimera/ranked_B3.csv
+```
+
+Run the 10-generation verification check:
+
+```powershell
+python tests/verify_chimera_token_mode.py configs/chimera_multihance.ini 10
+```

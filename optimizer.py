@@ -7,6 +7,7 @@ import individual as I
 import rule as Rule
 import regex_tree
 import pattern_engine as PE
+import sequence_codec as SC
 
 
 class Optimizer:
@@ -30,6 +31,8 @@ class Optimizer:
 
         # Matching mode
         self.matching_mode = config.get("matching_mode", "substring")
+        self.sequence_mode = config.get("sequence_mode", "char")
+        self.token_mode = SC.is_token_mode(config)
 
         # Gradient-based weight optimisation (replaces mut_change_weight)
         self.optimize_weights = (
@@ -50,8 +53,7 @@ class Optimizer:
                 float(config.get("mut_remove_gap", "0.1")) if self.enable_gaps else 0.0
             )
             self.mCHC = float(config.get("mut_change_character", "0.1"))
-            codes = pd.read_csv("data/translation/amino_to_amino.csv")
-            self.codes = codes["code"].tolist()
+            self.codes = SC.load_alphabet(config)
 
             # ── Experimental feature flags & mutation rates ──
             _bool = lambda k, d="False": config.get(k, d).strip().lower() == "true"
@@ -61,6 +63,13 @@ class Optimizer:
             self.exp_composition = _bool("exp_composition")
             self.exp_match_count = _bool("exp_match_count")
             self.exp_circular = _bool("exp_circular")
+            if SC.is_token_mode(config):
+                self.exp_char_classes = False
+                self.exp_variable_gaps = False
+                self.exp_weighted_positions = False
+                self.exp_composition = False
+                self.exp_match_count = False
+                self.exp_circular = False
             self.mCC = (
                 float(config.get("mut_char_class", "0.1"))
                 if self.exp_char_classes
@@ -447,7 +456,13 @@ class Optimizer:
             return
         weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
 
-        if self.exp_char_classes or self.exp_variable_gaps:
+        if self.token_mode:
+            tokens = SC.random_observed_token_pattern(self.config, self.ruleSize)
+            tokens = SC.strip_edge_wildcards(tokens)
+            if not tokens:
+                tokens = [R.choice(self.codes)]
+            rule = Rule.Rule(SC.join_tokens(tokens, self.config), weight, 0)
+        elif self.exp_char_classes or self.exp_variable_gaps:
             # Element-aware rule creation
             gap_ch = 0.10 if self.enable_gaps else 0.0
             class_ch = 0.15 if self.exp_char_classes else 0.0
@@ -488,6 +503,18 @@ class Optimizer:
         """Replace one concrete position with a different amino acid."""
         if not rule.pattern or len(rule.pattern) == 0:
             return
+        if self.token_mode:
+            tokens = SC.split_tokens(rule.pattern, self.config)
+            concrete = [i for i, token in enumerate(tokens) if token != SC.WILDCARD]
+            if not concrete:
+                return
+            idx = R.choice(concrete)
+            pool = SC.token_replacement_pool(tokens[idx], self.codes)
+            if not pool:
+                return
+            tokens[idx] = R.choice(pool)
+            rule.pattern = SC.join_tokens(tokens, self.config)
+            return
         if self.exp_char_classes or self.exp_variable_gaps:
             self._mut_change_character_elements(rule)
             return
@@ -524,6 +551,22 @@ class Optimizer:
     # Alter patterns mutation (add letter)
     def mut_add_to_pattern(self, rule):
         # Use element-aware insertion when experimental features could be active
+        if self.token_mode:
+            tokens = SC.split_tokens(rule.pattern, self.config)
+            if len(tokens) >= self.ruleSize:
+                return
+            # Prefer replacing with a real observed motif of the larger size.
+            if tokens and R.random() < 0.7:
+                new_size = min(len(tokens) + 1, self.ruleSize)
+                tokens = SC.random_observed_token_pattern(self.config, new_size)
+            else:
+                token = R.choice(self.codes)
+                pos = R.randint(0, len(tokens))
+                tokens.insert(pos, token)
+            tokens = SC.strip_edge_wildcards(tokens)
+            if tokens:
+                rule.pattern = SC.join_tokens(tokens, self.config)
+            return
         if self.exp_char_classes or self.exp_variable_gaps:
             self._mut_add_to_pattern_elements(rule)
             return
@@ -560,6 +603,17 @@ class Optimizer:
     # Alter patterns mutation (remove letter)
     def mut_remove_from_pattern(self, rule):
         # Use element-aware removal when experimental features could be active
+        if self.token_mode:
+            tokens = SC.split_tokens(rule.pattern, self.config)
+            if len(tokens) == 0:
+                return
+            if len(tokens) == 1:
+                rule.pattern = ""
+                return
+            del tokens[R.randint(0, len(tokens) - 1)]
+            tokens = SC.strip_edge_wildcards(tokens)
+            rule.pattern = SC.join_tokens(tokens, self.config) if tokens else ""
+            return
         if self.exp_char_classes or self.exp_variable_gaps:
             self._mut_remove_from_pattern_elements(rule)
             return
@@ -604,6 +658,23 @@ class Optimizer:
         the first or last position (gaps are only allowed in the middle).
         """
         if len(rule.pattern) == 0:
+            return
+        if self.token_mode:
+            tokens = SC.split_tokens(rule.pattern, self.config)
+            n = len(tokens)
+            if n < 3:
+                return
+            non_gap = [
+                i
+                for i, token in enumerate(tokens)
+                if token != SC.WILDCARD and 0 < i < n - 1
+            ]
+            total_non_gap = sum(1 for token in tokens if token != SC.WILDCARD)
+            if not non_gap or total_non_gap <= 1:
+                return
+            tokens[R.choice(non_gap)] = SC.WILDCARD
+            tokens = SC.strip_edge_wildcards(tokens)
+            rule.pattern = SC.join_tokens(tokens, self.config)
             return
         # Element-aware path when experimental features are active
         if self.exp_char_classes or self.exp_variable_gaps:
@@ -650,6 +721,24 @@ class Optimizer:
     def mut_remove_gap(self, rule):
         """Replace one random '_' in the pattern with a random amino acid."""
         if len(rule.pattern) == 0:
+            return
+        if self.token_mode:
+            tokens = SC.split_tokens(rule.pattern, self.config)
+            gap_positions = [
+                i for i, token in enumerate(tokens) if token == SC.WILDCARD
+            ]
+            if not gap_positions:
+                return
+            idx = R.choice(gap_positions)
+            left_slot = SC.token_slot(tokens[idx - 1]) if idx > 0 else ""
+            right_slot = SC.token_slot(tokens[idx + 1]) if idx + 1 < len(tokens) else ""
+            pool = [
+                token
+                for token in self.codes
+                if SC.token_slot(token) in (left_slot, right_slot)
+            ]
+            tokens[idx] = R.choice(pool or self.codes)
+            rule.pattern = SC.join_tokens(tokens, self.config)
             return
         # Element-aware path when experimental features are active
         if self.exp_char_classes or self.exp_variable_gaps:

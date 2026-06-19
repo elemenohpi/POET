@@ -5,22 +5,29 @@ import pandas as pd
 
 import regex_tree
 import pattern_engine as PE
+import sequence_codec as SC
 
-_codes_cache = None
+_codes_cache = {}
 
 
-def _get_codes():
+def _get_codes(config=None):
     global _codes_cache
-    if _codes_cache is None:
-        _codes_cache = pd.read_csv("data/translation/amino_to_amino.csv")[
-            "code"
-        ].tolist()
-    return _codes_cache
+    if config is not None:
+        path = config.get("alphabet_data", "data/translation/amino_to_amino.csv")
+        column = config.get("alphabet_column", "code")
+    else:
+        path = "data/translation/amino_to_amino.csv"
+        column = "code"
+    key = (path, column)
+    if key not in _codes_cache:
+        _codes_cache[key] = pd.read_csv(path)[column].astype(str).tolist()
+    return _codes_cache[key]
 
 
 class Individual:
     # Constructor
     def __init__(self, config):
+        self.config = config
         self.rules = []
         self.usedRules = {}
         self.usedRulesCount = 0
@@ -32,6 +39,7 @@ class Individual:
         self.test = 0
         self.extra = {}
         self.matching_mode = config.get("matching_mode", "substring")
+        self.sequence_mode = config.get("sequence_mode", "char")
 
     def remove_unexpressed(self):
         self.rules = [rule for rule in self.rules if rule.status != 0]
@@ -69,7 +77,11 @@ class Individual:
         When *config* is provided and experimental features are enabled, the
         element-based engine is used to generate richer initial patterns.
         """
-        codes = _get_codes()
+        codes = _get_codes(config)
+
+        if config is not None and SC.is_token_mode(config):
+            self._init_token_pattern(config)
+            return
 
         # Detect experimental features from config
         _bool = lambda k, d="False": (
@@ -129,6 +141,18 @@ class Individual:
             self.rules.append(rule)
         self.bubbleSort()
 
+    def _init_token_pattern(self, config):
+        """Initialize token-mode rules from observed training motifs."""
+        for _i in range(R.randint(1, int(self.maxRuleCount / 3))):
+            weight = round(R.uniform(self.minWeight, self.maxWeight), 2)
+            tokens = SC.random_observed_token_pattern(config, self.ruleSize)
+            tokens = SC.strip_edge_wildcards(tokens)
+            if not tokens:
+                tokens = [R.choice(SC.load_alphabet(config))]
+            pattern = SC.join_tokens(tokens, config)
+            self.rules.append(Rule.Rule(pattern, weight, 0))
+        self.bubbleSort()
+
     def init_regex_pattern(self, config):
         """Initialize rules with tree-based regex patterns (regex mode)."""
         depth = int(config.get("max_depth_tree", "4"))
@@ -174,7 +198,9 @@ class Individual:
     # 	print(str(i.pattern) + " => " + str(i.weight))
 
     def bubbleSort(self):
-        self.rules.sort(key=lambda r: len(r.pattern) if r.pattern else 0, reverse=True)
+        self.rules.sort(
+            key=lambda r: SC.pattern_size(r.pattern, self.config), reverse=True
+        )
 
     def print(self):
         for kh, rule in enumerate(self.rules):

@@ -1,0 +1,97 @@
+sheet,row,replicate_label,construct,raw_value
+B2chimeraMultihance,4,B2 1,B2,9.246603
+B2chimeraMultihance,5,B2 2,B2,13.671075
+B2chimeraMultihance,6,B2 3,B2,4.496538
+B2chimeraMultihance,7,B2 4,H293,1.384081
+B2chimeraMultihance,8,B2 5,H293,2.615935
+B2chimeraMultihance,9,B2 6,H293,2.962829
+B2chimeraMultihance,10,B2 7,TM1,18.02172
+B2chimeraMultihance,11,B2 8,TM1,22.936275
+B2chimeraMultihance,12,B2 9,TM1,16.371407
+B2chimeraMultihance,13,B2 10,TM2,16.380452
+B2chimeraMultihance,14,B2 11,TM2,14.402904
+B2chimeraMultihance,15,B2 12,TM2,10.062811
+B2chimeraMultihance,16,B2 13,TM3,37.731795
+B2chimeraMultihance,17,B2 14,TM3,31.493296
+B2chimeraMultihance,18,B2 15,TM3,21.374362
+B2chimeraMultihance,19,B2 16,TM4,24.556144
+B2chimeraMultihance,20,B2 17,TM4,17.738878
+B2chimeraMultihance,21,B2 18,TM4,20.253717
+B2chimeraMultihance,22,B2 19,TM5,7.436683
+B2chimeraMultihance,23,B2 20,TM5,5.998995
+B2chimeraMultihance,24,B2 21,TM5,5.891076
+B2chimeraMultihance,25,B2 22,TM6,46.84378
+B2chimeraMultihance,26,B2 23,TM6,50.342401
+B2chimeraMultihance,27,B2 24,TM6,41.274367
+B2chimeraMultihance,28,B2 25,TM7,3.962453
+B2chimeraMultihance,29,B2 26,TM7,3.976859
+B2chimeraMultihance,30,B2 27,TM7,4.183613
+B2chimeraMultihance,31,B2 28,TM8,4.101613
+B2chimeraMultihance,32,B2 29,TM8,3.892565
+B2chimeraMultihance,33,B2 30,TM8,4.963818
+B2chimeraMultihance,34,B2 31,TM9,14.423287
+B2chimeraMultihance,35,B2 32,TM9,14.349647
+B2chimeraMultihance,36,B2 33,TM9,10.587233
+B2chimeraMultihance,37,B2 34,TM10,2.640302
+B2chimeraMultihance,38,B2 35,TM10,2.691204
+B2chimeraMultihance,39,B2 36,TM10,3.179539
+B2chimeraMultihance,40,B2 37,TM11,6.668104
+B2chimeraMultihance,41,B2 38,TM11,6.925613
+B2chimeraMultihance,42,B2 39,TM11,7.532194
+B2chimeraMultihance,43,B2 40,TM12,3.425484
+B2chimeraMultihance,44,B2 41,TM12,3.845237
+B2chimeraMultihance,45,B2 42,TM12,4.290237
+B2chimeraMultihance,46,B2 43,B3-EXTRA,9.666289
+B2chimeraMultihance,47,B2 44,B3-EXTRA,9.589795
+B2chimeraMultihance,48,B2 45,B3-EXTRA,11.949756
+B2chimeraMultihance,49,B2 46,TM10-ONLY,2.812873
+B2chimeraMultihance,50,B2 47,TM10-ONLY,3.126246
+B2chimeraMultihance,51,B2 48,TM10-ONLY,3.086336
+B3chimeraMultihance,28,Batch 2 1,B2,29.307517
+B3chimeraMultihance,29,Batch 2 2,B2,31.901915
+B3chimeraMultihance,30,Batch 2 3,B2,22.528913
+B3chimeraMultihance,31,Batch 2 4,B3,6.75893
+B3chimeraMultihance,32,Batch 2 5,B3,5.813435
+B3chimeraMultihance,33,Batch 2 6,B3,3.908547
+B3chimeraMultihance,34,Batch 2 7,TM6,50.730198
+B3chimeraMultihance,35,Batch 2 8,TM6,47.527627
+B3chimeraMultihance,36,Batch 2 9,TM6,32.535669
+B3chimeraMultihance,37,Batch 2 10,293C,1.992291
+B3chimeraMultihance,38,Batch 2 11,293C,2.198259
+B3chimeraMultihance,39,Batch 2 12,293C,2.513084
+B3chimeraMultihance,40,Batch 2 13,T1,6.15367
+B3chimeraMultihance,41,Batch 2 14,T1,4.359625
+B3chimeraMultihance,42,Batch 2 15,T1,5.476718
+B3chimeraMultihance,43,Batch 2 16,T2,3.889372
+B3chimeraMultihance,44,Batch 2 17,T2,3.346995
+B3chimeraMultihance,45,Batch 2 18,T2,3.675143
+B3chimeraMultihance,46,Batch 2 19,T3,5.92219
+B3chimeraMultihance,47,Batch 2 20,T3,4.981076
+B3chimeraMultihance,48,Batch 2 21,T3,5.370151
+B3chimeraMultihance,49,Batch 2 22,T4,2.595206
+B3chimeraMultihance,50,Batch 2 23,T4,2.565463
+B3chimeraMultihance,51,Batch 2 24,T4,2.836213
+B3chimeraMultihance,52,Batch 2 25,T5,6.726402
+B3chimeraMultihance,53,Batch 2 26,T5,5.616594
+B3chimeraMultihance,54,Batch 2 27,T5,5.726262
+B3chimeraMultihance,55,Batch 2 28,T6,2.209143
+B3chimeraMultihance,56,Batch 2 29,T6,2.766773
+B3chimeraMultihance,57,Batch 2 30,T6,3.125725
+B3chimeraMultihance,58,Batch 2 31,T7,18.713285
+B3chimeraMultihance,59,Batch 2 32,T7,20.471189
+B3chimeraMultihance,60,Batch 2 33,T7,21.939362
+B3chimeraMultihance,61,Batch 2 34,T8,14.13131
+B3chimeraMultihance,62,Batch 2 35,T8,13.518782
+B3chimeraMultihance,63,Batch 2 36,T8,15.781376
+B3chimeraMultihance,64,Batch 2 37,T9,4.48694
+B3chimeraMultihance,65,Batch 2 38,T9,4.30566
+B3chimeraMultihance,66,Batch 2 39,T9,3.715873
+B3chimeraMultihance,67,Batch 2 40,T10,5.646526
+B3chimeraMultihance,68,Batch 2 41,T10,5.779175
+B3chimeraMultihance,69,Batch 2 42,T10,4.947866
+B3chimeraMultihance,70,Batch 2 43,T11,2.967784
+B3chimeraMultihance,71,Batch 2 44,T11,2.795045
+B3chimeraMultihance,72,Batch 2 45,T11,2.973826
+B3chimeraMultihance,73,Batch 2 46,T12,4.969663
+B3chimeraMultihance,74,Batch 2 47,T12,5.249681
+B3chimeraMultihance,75,Batch 2 48,T12,5.296416
