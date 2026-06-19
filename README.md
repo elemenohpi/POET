@@ -65,6 +65,14 @@ You can run POET through a terminal using the following command in the main dire
 python poet.py
 ```
 
+On this branch, the root `config.ini` is set up for the chimera MultiHance
+experiment. The previous peptide default is preserved as
+`configs/default_peptide.ini`:
+
+```powershell
+python poet.py -config configs/default_peptide.ini
+```
+
 additional options and runtime commands can be found by adding `-h` option to the command above to access the help instructions:
 
 ```
@@ -97,17 +105,20 @@ python scripts/chimera/build_chimera_dataset.py
 Train a chimera model:
 
 ```powershell
-python poet.py -config configs/chimera_multihance.ini
+python poet.py
 ```
+
+The same chimera configuration is also available explicitly at
+`configs/chimera_multihance.ini`.
 
 Rank any-to-any candidates from a trained model:
 
 ```powershell
-python scripts/chimera/rank_chimera_candidates.py output/chimera/model.csv -c configs/chimera_multihance.ini --backbone B3 --max-swaps 2 --top 50 -o output/chimera/ranked_B3.csv
+python scripts/chimera/rank_chimera_candidates.py output/chimera/model.csv -c config.ini --backbone B3 --max-swaps 2 --top 50 -o output/chimera/ranked_B3.csv
 ```
 
 Run the 10-generation verification check:
 
 ```powershell
-python tests/verify_chimera_token_mode.py configs/chimera_multihance.ini 10
+python tests/verify_chimera_token_mode.py config.ini 10
 ```
