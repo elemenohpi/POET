@@ -1,3 +1,5 @@
+import os
+
 import fitness as F
 import pandas as pd
 import archivist as Archivist
@@ -8,6 +10,32 @@ import rule as Rule
 import regex_tree
 import pattern_engine as PE
 import sequence_codec as SC
+from mutation_stats import MutationStats
+
+# Per-rule operators whose effect can reorder the rule list.
+_RESORT_RULE_OPS = frozenset(
+    {"add_to_pattern", "remove_from_pattern", "char_class", "variable_gap"}
+)
+
+# Every mutation-rate attribute, for uniform scaling by mutation_rate_scale.
+_RATE_ATTRS = (
+    "mAR",
+    "mRR",
+    "mCW",
+    "mATP",
+    "mRFP",
+    "mCHC",
+    "mIG",
+    "mRG",
+    "mCC",
+    "mVG",
+    "mPW",
+    "mCOMP",
+    "mReR",
+    "mReS",
+    "mAA",
+    "mRN",
+)
 
 
 class Optimizer:
@@ -121,6 +149,89 @@ class Optimizer:
                 )
             )
 
+        self._init_mutation_selection(config)
+
+    # ── Mutation-selection ablation setup ──────────────────────────────────
+
+    def _init_mutation_selection(self, config):
+        """Configure the mutation_selection / mutation_rate_scale ablation.
+
+        See MUTATION_ABLATION.md for how to run the three-arm comparison.
+
+        `mutation_selection = independent` (default) reproduces the historical
+        behaviour bit-for-bit: every operator rolls its own Bernoulli and an
+        operator that cannot change the genotype simply wastes the roll.
+
+        `mutation_selection = feasible` computes which operators can actually
+        change the genotype first and redistributes the probability mass of
+        the infeasible ones over the feasible ones.
+        """
+        self.mutation_selection = (
+            config.get("mutation_selection", "independent").strip().lower()
+        )
+        if self.mutation_selection not in ("independent", "feasible"):
+            raise ValueError(
+                "Invalid mutation_selection '{}': expected 'independent' or "
+                "'feasible'".format(self.mutation_selection)
+            )
+        if self.mutation_selection == "feasible" and self.matching_mode != "substring":
+            raise ValueError(
+                "mutation_selection = feasible is only implemented for "
+                "matching_mode = substring"
+            )
+
+        self.mutation_rate_scale = float(config.get("mutation_rate_scale", "1.0"))
+        if self.mutation_rate_scale < 0:
+            raise ValueError("mutation_rate_scale must be >= 0")
+        if self.mutation_rate_scale != 1.0:
+            for attr in _RATE_ATTRS:
+                if hasattr(self, attr):
+                    setattr(
+                        self, attr, min(1.0, getattr(self, attr) * self.mutation_rate_scale)
+                    )
+
+        stats_on = config.get("mutation_stats", "False").strip().lower() == "true"
+        if stats_on and self.matching_mode != "substring":
+            raise ValueError(
+                "mutation_stats is only implemented for matching_mode = substring"
+            )
+        self.stats = MutationStats() if stats_on else None
+
+        if self.matching_mode != "substring":
+            return
+
+        # Operator tables. A rate of 0 removes the operator from the pool
+        # entirely, so it never receives redistributed mass either.
+        self.indv_op_rates = {"add_rule": self.mAR, "remove_rule": self.mRR}
+        self.comp_op_rates = {"composition": self.mCOMP}
+        self.rule_op_rates = {
+            "change_weight": 0.0 if self.optimize_weights else self.mCW,
+            "add_to_pattern": self.mATP,
+            "remove_from_pattern": self.mRFP,
+            "change_character": self.mCHC,
+            "insert_gap": self.mIG,
+            "remove_gap": self.mRG,
+            "char_class": self.mCC,
+            "variable_gap": self.mVG,
+            "position_weight": self.mPW,
+        }
+        self._indv_op_fns = {
+            "add_rule": self.mut_add_rule,
+            "remove_rule": self.mut_remove_rule,
+            "composition": self.mut_composition,
+        }
+        self._rule_op_fns = {
+            "change_weight": self.mut_change_weight,
+            "add_to_pattern": self.mut_add_to_pattern,
+            "remove_from_pattern": self.mut_remove_from_pattern,
+            "change_character": self.mut_change_character,
+            "insert_gap": self.mut_insert_gap,
+            "remove_gap": self.mut_remove_gap,
+            "char_class": self.mut_char_class,
+            "variable_gap": self.mut_variable_gap,
+            "position_weight": self.mut_position_weight,
+        }
+
     def optimize(self):
         fitness = F.Fitness(self.config)
         arch = Archivist.Archivist(self.config)
@@ -138,6 +249,7 @@ class Optimizer:
             self._run_generations(fitness, arch)
         finally:
             fitness.stop_workers()
+            self._report_mutation_stats()
 
     def _run_generations(self, fitness, arch):
         for i in range(self.runs):
@@ -359,45 +471,255 @@ class Optimizer:
 
     def _mutate_substring(self, pop):
         """Apply substring-mode mutations to all individuals."""
+        if self.mutation_selection == "feasible":
+            self._mutate_substring_feasible(pop)
+        else:
+            self._mutate_substring_independent(pop)
+
+    def _mutate_substring_independent(self, pop):
+        """Independent per-operator Bernoulli rolls (historical behaviour).
+
+        An operator that cannot change the genotype in its current state
+        (e.g. add-to-pattern on a rule already at `maximum_rule_size`) still
+        consumes its roll and returns without doing anything. Enable
+        `mutation_stats` to measure how often that happens.
+        """
         for indv in pop:
             needs_sort = False
             if R.random() <= self.mAR:
-                self.mut_add_rule(indv)
+                self._call_indv_op("add_rule", indv)
                 needs_sort = True
             if R.random() <= self.mRR:
-                self.mut_remove_rule(indv)
+                self._call_indv_op("remove_rule", indv)
             for rule in indv.rules[:]:
                 if not self.optimize_weights and R.random() <= self.mCW:
-                    self.mut_change_weight(rule)
+                    self._call_rule_op("change_weight", rule)
                 if R.random() <= self.mATP:
-                    self.mut_add_to_pattern(rule)
+                    self._call_rule_op("add_to_pattern", rule)
                     needs_sort = True
                 if R.random() <= self.mRFP:
-                    self.mut_remove_from_pattern(rule)
+                    self._call_rule_op("remove_from_pattern", rule)
                     needs_sort = True
                     if rule.pattern == "":
                         indv.rules.remove(rule)
                         continue
                 if R.random() <= self.mCHC:
-                    self.mut_change_character(rule)
+                    self._call_rule_op("change_character", rule)
                 if R.random() <= self.mIG:
-                    self.mut_insert_gap(rule)
+                    self._call_rule_op("insert_gap", rule)
                 if R.random() <= self.mRG:
-                    self.mut_remove_gap(rule)
+                    self._call_rule_op("remove_gap", rule)
                 # ── Experimental per-rule mutations ──
                 if R.random() <= self.mCC:
-                    self.mut_char_class(rule)
+                    self._call_rule_op("char_class", rule)
                     needs_sort = True
                 if R.random() <= self.mVG:
-                    self.mut_variable_gap(rule)
+                    self._call_rule_op("variable_gap", rule)
                     needs_sort = True
                 if R.random() <= self.mPW:
-                    self.mut_position_weight(rule)
+                    self._call_rule_op("position_weight", rule)
             # Experimental individual-level mutations
             if R.random() <= self.mCOMP:
-                self.mut_composition(indv)
+                self._call_indv_op("composition", indv)
             if needs_sort:
                 indv.bubbleSort()
+
+    def _mutate_substring_feasible(self, pop):
+        """Feasibility-aware variant: infeasible operators never consume a roll.
+
+        For each individual — and each of its rules — the set of operators
+        that can structurally change the genotype is computed first. The
+        probability mass of the infeasible operators is then redistributed
+        proportionally over the feasible ones, so the expected number of
+        *applied* mutations stays at the nominal total instead of decaying
+        as the genotype approaches a boundary (max rule size, no gaps
+        present, rule count at the cap, ...).
+
+        The feasible set is computed once per rule, before any operator is
+        applied — this is the literal form of the proposal. An operator
+        applied early in the pass can therefore still invalidate a later one;
+        `mutation_stats` reports that residual as the remaining wasted-roll
+        rate for this arm.
+        """
+        for indv in pop:
+            needs_sort = False
+
+            for name, rate in self._effective_rates(
+                self.indv_op_rates, self._feasible_indv_ops(indv)
+            ).items():
+                if R.random() <= rate:
+                    self._call_indv_op(name, indv)
+                    if name == "add_rule":
+                        needs_sort = True
+
+            for rule in indv.rules[:]:
+                rates = self._effective_rates(
+                    self.rule_op_rates, self._feasible_rule_ops(rule)
+                )
+                for name, rate in rates.items():
+                    if R.random() > rate:
+                        continue
+                    self._call_rule_op(name, rule)
+                    if name in _RESORT_RULE_OPS:
+                        needs_sort = True
+                    if name == "remove_from_pattern" and rule.pattern == "":
+                        indv.rules.remove(rule)
+                        break
+
+            for name, rate in self._effective_rates(
+                self.comp_op_rates, self._feasible_comp_ops(indv)
+            ).items():
+                if R.random() <= rate:
+                    self._call_indv_op(name, indv)
+
+            if needs_sort:
+                indv.bubbleSort()
+
+    @staticmethod
+    def _effective_rates(rates, feasible):
+        """Redistribute infeasible operators' probability mass over feasible ones.
+
+        Returns an insertion-ordered {name: rate} map covering only the
+        feasible operators, scaled so their rates sum to the same total as
+        the full nominal pool. Individual rates are capped at 1.0, so the
+        total cannot always be preserved when very few operators are
+        feasible.
+        """
+        active = {n: r for n, r in rates.items() if r > 0}
+        if not active:
+            return {}
+        usable = {n: r for n, r in active.items() if n in feasible}
+        usable_total = sum(usable.values())
+        if usable_total <= 0:
+            return {}
+        scale = sum(active.values()) / usable_total
+        return {n: min(1.0, r * scale) for n, r in usable.items()}
+
+    # ── Feasibility predicates ──────────────────────────────────────────────
+    #
+    # These capture *structural* impossibility (the early-return branches in
+    # the mut_* methods), not stochastic identity: an operator reported as
+    # feasible may still pick a sub-action that happens to be a no-op. The
+    # mutation_stats counters measure the ground truth.
+
+    def _feasible_indv_ops(self, individual):
+        feasible = set()
+        if len(individual.rules) < self.ruleCount:
+            feasible.add("add_rule")
+        if len(individual.rules) > 0:
+            feasible.add("remove_rule")
+        return feasible
+
+    def _feasible_comp_ops(self, individual):
+        if len(individual.rules) < 2:
+            return set()
+        has_group = any(r.group_id != 0 for r in individual.rules)
+        independents = sum(1 for r in individual.rules if r.group_id == 0)
+        return {"composition"} if has_group or independents >= 2 else set()
+
+    def _feasible_rule_ops(self, rule):
+        """Return the set of per-rule operator names that can change *rule*."""
+        elements = None
+        if not rule.pattern:
+            units, concrete, wildcards = [], [], []
+        elif self.token_mode:
+            units = SC.split_tokens(rule.pattern, self.config)
+            concrete = [i for i, t in enumerate(units) if t != SC.WILDCARD]
+            wildcards = [i for i, t in enumerate(units) if t == SC.WILDCARD]
+        elif self.exp_char_classes or self.exp_variable_gaps:
+            elements = PE.parse_pattern(rule.pattern)
+            units = elements
+            concrete = [i for i, e in enumerate(units) if e[0] in ("c", "cc")]
+            wildcards = [i for i, e in enumerate(units) if e[0] == "w"]
+        else:
+            units = list(rule.pattern)
+            concrete = [i for i, c in enumerate(units) if c != "_"]
+            wildcards = [i for i, c in enumerate(units) if c == "_"]
+
+        n = len(units)
+        feasible = {"change_weight"}  # always shifts the weight
+
+        if n < self.ruleSize:
+            feasible.add("add_to_pattern")
+        if n >= 1:
+            feasible.add("remove_from_pattern")
+        if concrete and len(self.codes) > 1:
+            feasible.add("change_character")
+        if (
+            n >= 3
+            and len(concrete) > 1
+            and any(0 < i < n - 1 for i in concrete)
+        ):
+            feasible.add("insert_gap")
+        if wildcards:
+            feasible.add("remove_gap")
+
+        if elements is not None:
+            classes = [i for i, e in enumerate(elements) if e[0] == "cc"]
+            var_gaps = [i for i, e in enumerate(elements) if e[0] == "vg"]
+            if self.exp_char_classes:
+                cap_ok = self.max_class_size is None or self.max_class_size >= 2
+                if (concrete and cap_ok) or classes:
+                    feasible.add("char_class")
+            if self.exp_variable_gaps:
+                interior_wild = any(0 < i < n - 1 for i in wildcards)
+                if var_gaps or (interior_wild and concrete):
+                    feasible.add("variable_gap")
+            if (
+                self.exp_weighted_positions
+                and n >= 1
+                and not PE.has_variable_length(elements)
+            ):
+                feasible.add("position_weight")
+
+        return feasible
+
+    # ── Instrumented operator invocation ────────────────────────────────────
+
+    @staticmethod
+    def _rule_signature(rule):
+        pw = rule.position_weights
+        return (
+            rule.pattern,
+            rule.weight,
+            tuple(pw) if pw else (),
+            rule.group_id,
+            rule.group_op,
+        )
+
+    @staticmethod
+    def _indv_signature(individual):
+        return (
+            len(individual.rules),
+            tuple((r.group_id, r.group_op) for r in individual.rules),
+        )
+
+    def _call_rule_op(self, name, rule):
+        fn = self._rule_op_fns[name]
+        if self.stats is None:
+            fn(rule)
+            return
+        before = self._rule_signature(rule)
+        fn(rule)
+        self.stats.record(name, before != self._rule_signature(rule))
+
+    def _call_indv_op(self, name, individual):
+        fn = self._indv_op_fns[name]
+        if self.stats is None:
+            fn(individual)
+            return
+        before = self._indv_signature(individual)
+        fn(individual)
+        self.stats.record(name, before != self._indv_signature(individual))
+
+    def _report_mutation_stats(self):
+        if self.stats is None:
+            return
+        label = self.config.get("experiment_label", "")
+        print("\n" + self.stats.format_table(label), flush=True)
+        path = os.path.splitext(self.config["output_evo"])[0] + "_mutstats.csv"
+        self.stats.save_csv(path)
+        print("Mutation stats saved to {}".format(path), flush=True)
 
     def _mutate_regex(self, pop):
         """Apply regex-mode tree mutations to all individuals."""
